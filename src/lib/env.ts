@@ -55,11 +55,29 @@ const parseResult = envSchema.safeParse({
   } : {}),
 });
 
+let envData = parseResult.success ? parseResult.data : null;
+
 if (!parseResult.success) {
-  const errors = parseResult.error.flatten().fieldErrors;
-  console.error('❌ Invalid environment variables:', errors);
-  throw new Error(`Invalid environment variables: ${JSON.stringify(errors)}`);
+  if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.SKIP_ENV_VALIDATION === 'true') {
+    console.warn('⚠️ Environment validation failed during build time. Bypassing validation to allow compilation.');
+    envData = {
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://dummy.supabase.co',
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'dummy',
+      SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY || 'dummy',
+      DATABASE_URL: process.env.DATABASE_URL,
+      EMAIL_MODE: (process.env.EMAIL_MODE as any) || 'log',
+      EMAIL_FROM: process.env.EMAIL_FROM || 'BlueMargin <offres@example.com>',
+      AI_MODE: (process.env.AI_MODE as any) || 'heuristic',
+      PUBLIC_QUOTE_TOKEN_PEPPER: process.env.PUBLIC_QUOTE_TOKEN_PEPPER || 'dummy',
+      APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY || 'dummy',
+    };
+  } else {
+    const errors = parseResult.error.flatten().fieldErrors;
+    console.error('❌ Invalid environment variables:', errors);
+    throw new Error(`Invalid environment variables: ${JSON.stringify(errors)}`);
+  }
 }
 
-export const env = parseResult.data as z.infer<typeof clientSchema> & Partial<z.infer<typeof serverSchema>>;
+export const env = envData as z.infer<typeof clientSchema> & Partial<z.infer<typeof serverSchema>>;
 export type Env = typeof env;
