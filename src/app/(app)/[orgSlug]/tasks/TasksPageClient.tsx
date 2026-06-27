@@ -8,14 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { 
-  Plus, Check, X, Clock, User, Edit, Trash2, ArrowUpRight, 
+  Search, ChevronDown, Plus, Check, X, Clock, User, Edit, Trash2, ArrowUpRight, 
   CheckCircle2, FileText, ShieldAlert, Sparkles, FolderPlus,
   Phone, Mail, MapPin, MessageSquare, AlertTriangle, Eye, RefreshCw, UserCheck
 } from 'lucide-react';
 import { 
-  createTask, updateTask, completeTask, cancelTask, getTasks, bulkCompleteTasks, bulkCancelTasks 
+  createTask, updateTask, completeTask, cancelTask, getTasks, bulkCompleteTasks, bulkCancelTasks,
+  getActiveCustomersForSelect, getCustomerSubEntities
 } from '@/actions/tasks';
-import { createClient } from '@/lib/supabase/client';
 
 interface TasksPageClientProps {
   orgSlug: string;
@@ -62,6 +62,17 @@ export default function TasksPageClient({
   const [locations, setLocations] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
 
+  // Search and dropdown states for customer selection
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
+
+  const filteredCustomersForSelect = customers.filter(c => {
+    const searchLower = customerSearchQuery.toLowerCase();
+    const legalNameMatch = c.legal_name?.toLowerCase().includes(searchLower) || false;
+    const tradeNameMatch = c.trade_name?.toLowerCase().includes(searchLower) || false;
+    return legalNameMatch || tradeNameMatch;
+  });
+
   // Task actions modals
   const [taskToComplete, setTaskToComplete] = useState<any | null>(null);
   const [taskCompleteOutcome, setTaskCompleteOutcome] = useState('');
@@ -75,49 +86,28 @@ export default function TasksPageClient({
 
   const [taskToPostpone, setTaskToPostpone] = useState<any | null>(null);
 
-  // Initialize customer list on modal open
+  // Initialize customer list on modal open using server action
   useEffect(() => {
     if (showCreateModal) {
       const loadCustomers = async () => {
-        const supabase = createClient();
-        const { data: org } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('slug', orgSlug)
-          .single();
-
-        if (org) {
-          const { data } = await supabase
-            .from('customers')
-            .select('id, name, trade_name')
-            .eq('organization_id', org.id)
-            .eq('is_active', true)
-            .order('name');
-          setCustomers(data || []);
+        const res = await getActiveCustomersForSelect(orgSlug);
+        if (!res.error) {
+          setCustomers(res.data || []);
         }
       };
       loadCustomers();
     }
   }, [showCreateModal, orgSlug]);
 
-  // Load contacts and locations when customer is selected in create form
+  // Load contacts and locations when customer is selected in create form using server action
   useEffect(() => {
     if (newCustomerId) {
       const loadSubEntities = async () => {
-        const supabase = createClient();
-        const { data: locs } = await supabase
-          .from('customer_locations')
-          .select('id, name, address')
-          .eq('customer_id', newCustomerId)
-          .eq('is_active', true);
-        setLocations(locs || []);
-
-        const { data: conts } = await supabase
-          .from('contacts')
-          .select('id, first_name, last_name')
-          .eq('customer_id', newCustomerId)
-          .eq('is_active', true);
-        setContacts(conts || []);
+        const res = await getCustomerSubEntities(newCustomerId);
+        if (!res.error && res.data) {
+          setLocations(res.data.locations || []);
+          setContacts(res.data.contacts || []);
+        }
       };
       loadSubEntities();
     } else {
@@ -133,6 +123,21 @@ export default function TasksPageClient({
     if (!res.error) {
       setTasks(res.data || []);
     }
+  };
+
+  const closeCreateModal = () => {
+    setShowCreateModal(false);
+    setNewTitle('');
+    setNewDesc('');
+    setNewCustomerId('');
+    setNewLocationId('');
+    setNewContactId('');
+    setNewDueAt('');
+    setNewType('other');
+    setNewPriority('normal');
+    setNewAssigneeId(currentUserId);
+    setCustomerSearchQuery('');
+    setIsCustomerDropdownOpen(false);
   };
 
   const handleCreateTaskSubmit = async (e: React.FormEvent) => {
@@ -159,17 +164,7 @@ export default function TasksPageClient({
         setErrorMsg(res.error);
       } else {
         setSuccessMsg('Tâche créée avec succès !');
-        setShowCreateModal(false);
-        // Reset form
-        setNewTitle('');
-        setNewDesc('');
-        setNewCustomerId('');
-        setNewLocationId('');
-        setNewContactId('');
-        setNewDueAt('');
-        setNewType('other');
-        setNewPriority('normal');
-        setNewAssigneeId(currentUserId);
+        closeCreateModal();
         refreshTasks();
       }
     });
@@ -784,7 +779,7 @@ export default function TasksPageClient({
                 <FolderPlus className="h-5 w-5 text-primary" />
                 Créer une tâche commerciale
               </h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button onClick={closeCreateModal} className="text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -881,17 +876,85 @@ export default function TasksPageClient({
                 
                 <div className="grid gap-1">
                   <Label htmlFor="newCustomerId" className="text-xs font-semibold text-slate-700">Sélectionner un client / prospect</Label>
-                  <select
-                    id="newCustomerId"
-                    value={newCustomerId}
-                    onChange={(e) => setNewCustomerId(e.target.value)}
-                    className="flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-xs shadow-xs"
-                  >
-                    <option value="">-- Aucun client (Tâche générale) --</option>
-                    {customers.map(c => (
-                      <option key={c.id} value={c.id}>{c.trade_name || c.name}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsCustomerDropdownOpen(!isCustomerDropdownOpen)}
+                      className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-1 text-xs shadow-xs text-left cursor-pointer hover:border-slate-300 transition-colors"
+                    >
+                      <span className="truncate">
+                        {newCustomerId 
+                          ? (customers.find(c => c.id === newCustomerId)?.trade_name || customers.find(c => c.id === newCustomerId)?.legal_name || 'Client sélectionné') 
+                          : '-- Aucun client (Tâche générale) --'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-slate-400 shrink-0 ml-2" />
+                    </button>
+
+                    {isCustomerDropdownOpen && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => {
+                            setIsCustomerDropdownOpen(false);
+                            setCustomerSearchQuery('');
+                          }} 
+                        />
+                        <div className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white p-2 shadow-lg glass-panel animate-in fade-in slide-in-from-top-1 duration-100 max-h-72 overflow-hidden flex flex-col">
+                          <div className="relative mb-2">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Rechercher un client..."
+                              value={customerSearchQuery}
+                              onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 pl-8 pr-3 text-xs outline-hidden focus:border-primary focus:bg-white transition-all"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="overflow-y-auto space-y-1 pr-1 flex-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewCustomerId('');
+                                setIsCustomerDropdownOpen(false);
+                                setCustomerSearchQuery('');
+                              }}
+                              className={`flex w-full items-center rounded-sm px-2 py-1.5 text-xs text-left cursor-pointer transition-colors ${
+                                !newCustomerId ? 'bg-slate-100 text-slate-900 font-medium' : 'text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              -- Aucun client (Tâche générale) --
+                            </button>
+                            
+                            {filteredCustomersForSelect.length === 0 ? (
+                              <p className="text-center text-xs text-slate-400 py-3">Aucun client trouvé</p>
+                            ) : (
+                              filteredCustomersForSelect.map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setNewCustomerId(c.id);
+                                    setIsCustomerDropdownOpen(false);
+                                    setCustomerSearchQuery('');
+                                  }}
+                                  className={`flex w-full items-center rounded-sm px-2 py-1.5 text-xs text-left cursor-pointer transition-colors ${
+                                    newCustomerId === c.id ? 'bg-primary/10 text-primary font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {c.trade_name ? (
+                                    <span>{c.trade_name} <span className="text-[10px] text-slate-450 font-normal">({c.legal_name})</span></span>
+                                  ) : (
+                                    <span>{c.legal_name}</span>
+                                  )}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {newCustomerId && (
@@ -933,7 +996,7 @@ export default function TasksPageClient({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeCreateModal}
                   className="border-slate-200 text-slate-700 font-bold text-xs h-9"
                 >
                   Annuler

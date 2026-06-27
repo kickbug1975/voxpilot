@@ -1,0 +1,6 @@
+Code;Raison sociale;TVA;Email;Téléphone;Segment;Conditions de paiement;Adresse Facturation;Adresse Livraison
+CLI-001;Le Bistrot de la Mer;BE0123456789;contact@bistrotmer.be;+3225551234;horeca;30 jours fin de mois;12 Rue des Brasseurs, 1000 Bruxelles;12 Rue des Brasseurs, 1000 Bruxelles
+CLI-002;Poissonnerie Centrale;BE0987654321;info@poissonneriecentrale.com;+3293339988;retail;Paiement à la livraison;45 Chaussée de Gand, 9000 Gand;45 Chaussée de Gand, 9000 Gand
+CLI-003;Resto-Co Collectivité;BE0456123789;achats@restoco.be;+3237778899;collectivite;45 jours;88 Zone Industrielle, 2000 Anvers;88 Zone Industrielle, 2000 Anvers
+CLI-004;Marée Distribution;BE0789456123;admin@mareedist.be;+3248887766;grossiste;60 jours;14 Quai des Armateurs, 4000 Liège;14 Quai des Armateurs, 4000 Liège
+CLI-005;Association Marine;BE0321654987;contact@assomarine.org;+3281443322;autre;15 jours;5 Avenue des Mouettes, Namur;5 Avenue des Mouettes, Namur

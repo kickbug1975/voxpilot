@@ -262,3 +262,55 @@ export async function bulkCancelTasks(orgSlug: string, taskIds: string[]) {
     return { error: err instanceof Error ? err.message : 'Impossible d\'annuler les tâches.' };
   }
 }
+
+export async function getActiveCustomersForSelect(orgSlug: string) {
+  try {
+    const supabase = await createClient();
+    const orgId = await getOrgId(supabase, orgSlug);
+
+    const { data, error } = await supabase
+      .from('customers')
+      .select('id, legal_name, trade_name')
+      .eq('organization_id', orgId)
+      .eq('is_active', true)
+      .order('legal_name');
+
+    if (error) throw error;
+    return { data: data || [] };
+  } catch (err) {
+    console.error('Error fetching customers for select:', err);
+    return { error: err instanceof Error ? err.message : 'Impossible de charger les clients.' };
+  }
+}
+
+export async function getCustomerSubEntities(customerId: string) {
+  try {
+    const supabase = await createClient();
+
+    const { data: locs, error: locsError } = await supabase
+      .from('customer_locations')
+      .select('id, name, address')
+      .eq('customer_id', customerId)
+      .eq('is_active', true);
+
+    if (locsError) throw locsError;
+
+    const { data: conts, error: contsError } = await supabase
+      .from('contacts')
+      .select('id, first_name, last_name')
+      .eq('customer_id', customerId)
+      .eq('is_active', true);
+
+    if (contsError) throw contsError;
+
+    return { 
+      data: {
+        locations: locs || [],
+        contacts: conts || []
+      }
+    };
+  } catch (err) {
+    console.error('Error fetching sub entities:', err);
+    return { error: err instanceof Error ? err.message : 'Impossible de charger les établissements ou contacts.' };
+  }
+}
