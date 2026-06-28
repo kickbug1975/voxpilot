@@ -383,13 +383,30 @@ export default function VoiceAssistantWidget({ orgSlug }: VoiceAssistantWidgetPr
 
       {/* FLOATING ACTION BUTTON */}
       {!isRecording && !isProcessing && !extracted && !errorMsg && !successMsg && (
-        <Button
-          onClick={startRecording}
-          size="icon"
-          className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 text-white shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer"
-        >
-          <Mic className="h-6 w-6" />
-        </Button>
+        <div className="relative group flex items-center">
+          {/* Tooltip Popup */}
+          <div className="absolute right-16 mr-2 hidden group-hover:flex flex-col w-72 bg-slate-900/95 backdrop-blur-xs text-white text-[11px] rounded-xl p-3.5 shadow-2xl border border-slate-800 transition-all duration-200 animate-in fade-in slide-in-from-right-2">
+            <p className="font-extrabold mb-1 text-primary flex items-center gap-1">
+              <Sparkles className="h-3.5 w-3.5 text-accent-500 animate-pulse" />
+              Assistant Vocal VoxPilot
+            </p>
+            <p className="text-slate-300 leading-relaxed mb-2 font-medium">
+              Cliquez pour dicter une action CRM par la voix. L'IA se charge de l'enregistrer automatiquement !
+            </p>
+            <div className="border-t border-slate-800 pt-2 space-y-1.5 text-slate-400 font-semibold italic">
+              <p className="hover:text-white transition-colors cursor-default">🗣️ "Rappelle-moi de relancer BlueMargin lundi prochain."</p>
+              <p className="hover:text-white transition-colors cursor-default">🗣️ "Appel sortant avec Dupont. Il veut une livraison rapide."</p>
+            </div>
+          </div>
+
+          <Button
+            onClick={startRecording}
+            size="icon"
+            className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 text-white shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 cursor-pointer"
+          >
+            <Mic className="h-6 w-6" />
+          </Button>
+        </div>
       )}
     </div>
   );
