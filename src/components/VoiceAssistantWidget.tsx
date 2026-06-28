@@ -9,11 +9,10 @@ import {
   Mic, X, Clock, User, Check, Loader2, 
   Trash2, AlertCircle, FileText, Calendar, Sparkles
 } from 'lucide-react';
-import { createTask } from '@/actions/tasks';
-import { createActivity } from '@/actions/activities';
-
 interface VoiceAssistantWidgetProps {
   orgSlug: string;
+  createTaskAction: (orgSlug: string, formData: FormData) => Promise<{ success?: boolean; data?: any; error?: string }>;
+  createActivityAction: (orgSlug: string, formData: FormData) => Promise<{ success?: boolean; data?: any; error?: string }>;
 }
 
 interface ExtractedData {
@@ -31,7 +30,11 @@ interface ExtractedData {
   };
 }
 
-export default function VoiceAssistantWidget({ orgSlug }: VoiceAssistantWidgetProps) {
+export default function VoiceAssistantWidget({ 
+  orgSlug,
+  createTaskAction,
+  createActivityAction
+}: VoiceAssistantWidgetProps) {
   const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -142,7 +145,7 @@ export default function VoiceAssistantWidget({ orgSlug }: VoiceAssistantWidgetPr
           if (actionData.dueDate) formData.append('dueAt', actionData.dueDate);
           formData.append('priority', 'normal');
 
-          const res = await createTask(orgSlug, formData);
+          const res = await createTaskAction(orgSlug, formData);
           if (res.error) throw new Error(res.error);
           
           setSuccessMsg("Tâche créée avec succès !");
@@ -154,7 +157,7 @@ export default function VoiceAssistantWidget({ orgSlug }: VoiceAssistantWidgetPr
           if (actionData.content) formData.append('content', actionData.content);
           formData.append('occurredAt', new Date().toISOString());
 
-          const res = await createActivity(orgSlug, formData);
+          const res = await createActivityAction(orgSlug, formData);
           if (res.error) throw new Error(res.error);
 
           setSuccessMsg("Activité enregistrée avec succès !");
