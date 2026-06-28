@@ -135,6 +135,7 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
         subject: subject,
         status: 'failed',
         provider: 'smtp',
+        error_message: err instanceof Error ? err.message : String(err),
         sent_by: userId,
         sent_at: new Date().toISOString()
       });
