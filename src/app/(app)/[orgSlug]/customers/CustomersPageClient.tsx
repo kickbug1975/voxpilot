@@ -56,9 +56,9 @@ export default function CustomersPageClient({
 
   // Filter customers based on search
   const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
+    (c.name && c.name.toLowerCase().includes(search.toLowerCase())) || 
     (c.code && c.code.toLowerCase().includes(search.toLowerCase())) ||
-    c.segment.toLowerCase().includes(search.toLowerCase())
+    (c.segment && c.segment.toLowerCase().includes(search.toLowerCase()))
   );
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -99,7 +99,8 @@ export default function CustomersPageClient({
   };
 
   // Convert segment label to French
-  const getSegmentLabel = (segment: string) => {
+  const getSegmentLabel = (segment: string | null | undefined) => {
+    if (!segment) return 'Non spécifié';
     switch (segment) {
       case 'retail': return 'Détail (Poissonnerie, Marché)';
       case 'grossiste': return 'Grossiste / Demi-gros';
