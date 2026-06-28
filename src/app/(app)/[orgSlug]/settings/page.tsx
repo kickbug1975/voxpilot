@@ -2,6 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getUserSmtpConfig } from '@/actions/settings';
 import SettingsClient from './SettingsClient';
 
 interface SettingsPageProps {
@@ -116,6 +117,9 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
 
   const isDevOrLog = process.env.NODE_ENV === 'development' || process.env.EMAIL_MODE === 'log';
 
+  // 9. Fetch current user SMTP configuration
+  const { data: smtpConfig } = await getUserSmtpConfig();
+
   return (
     <SettingsClient
       orgSlug={orgSlug}
@@ -126,6 +130,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
       invitations={pendingInvitations}
       isDevOrLog={isDevOrLog}
       initialCategories={categories || []}
+      initialSmtpConfig={smtpConfig || null}
     />
   );
 }

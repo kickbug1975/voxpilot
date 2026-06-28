@@ -3,6 +3,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { SupabaseClient } from '@supabase/supabase-js';
+import { headers } from 'next/headers';
+import { sendEmail } from '@/lib/emailSender';
 import { PricingEngine } from '@/domain/PricingEngine';
 import { Decimal } from 'decimal.js';
 import { logAuditEvent } from './audit';
@@ -480,20 +482,48 @@ export async function lockAndSendQuote(orgSlug: string, quoteId: string) {
 
     if (lockError) throw lockError;
 
-    // Insert simulated email message in email_messages table
+    // Envoi de l'e-mail via le service dynamique emailSender
     const recipientEmail = quote.contact_email || (quote.customers as any)?.primary_email;
     const to_emails = recipientEmail ? [recipientEmail] : [];
 
-    await supabase.from('email_messages').insert({
-      organization_id: orgId,
-      quote_id: quoteId,
-      to_emails,
+    let origin = 'http://localhost:3000';
+    try {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = headersList.get('x-forwarded-proto') || 'http';
+      origin = `${protocol}://${host}`;
+    } catch (e) {
+      console.warn('[EMAIL] headers() appelé hors contexte de requête. Utilisation de l\'origine par défaut.');
+    }
+    const quoteUrl = `${origin}/q/${token}`;
+
+    const htmlBody = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #0f172a; margin-bottom: 16px;">Votre offre commerciale ${quote.quote_number}</h2>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">
+          Bonjour,<br/><br/>
+          Une nouvelle offre commerciale a été préparée pour vous. Vous pouvez la consulter, la valider ou la refuser directement en ligne en cliquant sur le bouton ci-dessous :
+        </p>
+        <div style="margin: 24px 0; text-align: center;">
+          <a href="${quoteUrl}" style="background-color: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; display: inline-block;">
+            Consulter l'offre commerciale
+          </a>
+        </div>
+        <p style="color: #64748b; font-size: 12px; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+          Si le bouton ne fonctionne pas, vous pouvez copier et coller le lien suivant dans votre navigateur :<br/>
+          <a href="${quoteUrl}" style="color: #0284c7;">${quoteUrl}</a>
+        </p>
+      </div>
+    `;
+
+    await sendEmail({
+      userId: user.id,
+      organizationId: orgId,
+      to: to_emails,
       subject: `Offre commerciale ${quote.quote_number} sur BlueMargin`,
-      status: 'logged',
-      provider: 'console',
-      provider_message_id: token,
-      sent_by: user.id,
-      sent_at: new Date().toISOString(),
+      html: htmlBody,
+      quoteId: quoteId,
+      customMessageId: token
     });
 
     // Log event in quote_events

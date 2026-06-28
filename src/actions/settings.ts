@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { encrypt, decrypt } from '@/lib/encryption';
+import { sendEmail } from '@/lib/emailSender';
 
 // Helper to get organization ID and verify membership
 async function getOrgId(supabase: SupabaseClient, orgSlug: string): Promise<string> {
@@ -258,16 +260,45 @@ export async function inviteTeamMember(orgSlug: string, email: string, role: str
 
     if (inviteError) throw inviteError;
 
-    // Simulate email send
-    await admin.from('email_messages').insert({
-      organization_id: orgId,
-      to_emails: [email.trim().toLowerCase()],
+    // Envoi de l'e-mail via le service dynamique emailSender
+    let origin = 'http://localhost:3000';
+    try {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = headersList.get('x-forwarded-proto') || 'http';
+      origin = `${protocol}://${host}`;
+    } catch (e) {
+      console.warn('[EMAIL] headers() appelé hors contexte de requête. Utilisation de l\'origine par défaut.');
+    }
+    const inviteUrl = `${origin}/invite/${token}`;
+
+    const htmlBody = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #0f172a; margin-bottom: 16px;">Rejoignez l'organisation ${orgName} sur VoxPilot</h2>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">
+          Bonjour,<br/><br/>
+          Vous avez été invité(e) par un administrateur à rejoindre l'organisation <strong>${orgName}</strong> sur VoxPilot en tant que <strong>${role}</strong>.<br/>
+          Pour accepter cette invitation et configurer votre compte, cliquez sur le bouton ci-dessous :
+        </p>
+        <div style="margin: 24px 0; text-align: center;">
+          <a href="${inviteUrl}" style="background-color: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; display: inline-block;">
+            Accepter l'invitation
+          </a>
+        </div>
+        <p style="color: #64748b; font-size: 12px; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+          Si le bouton ne fonctionne pas, vous pouvez copier et coller le lien suivant dans votre navigateur :<br/>
+          <a href="${inviteUrl}" style="color: #0284c7;">${inviteUrl}</a>
+        </p>
+      </div>
+    `;
+
+    await sendEmail({
+      userId: user.id,
+      organizationId: orgId,
+      to: [email.trim().toLowerCase()],
       subject: `Invitation à rejoindre l'organisation ${orgName} sur BlueMargin`,
-      status: 'logged',
-      sent_by: user.id,
-      sent_at: new Date().toISOString(),
-      provider: 'console',
-      provider_message_id: token // Store token here for outbox debug visibility
+      html: htmlBody,
+      customMessageId: token
     });
 
     // Log to audit log
@@ -305,6 +336,13 @@ export async function resendInvitation(orgSlug: string, inviteId: string) {
     const orgId = await getOrgId(supabase, orgSlug);
     await verifyAdminOrOwnerRole(supabase, orgId, user.id);
 
+    const { data: orgData } = await admin
+      .from('organizations')
+      .select('name')
+      .eq('id', orgId)
+      .single();
+    const orgName = orgData?.name || 'votre organisation';
+
     // Fetch original invitation
     const { data: invite, error: inviteError } = await admin
       .from('organization_invitations')
@@ -332,17 +370,45 @@ export async function resendInvitation(orgSlug: string, inviteId: string) {
       .eq('id', inviteId);
 
     if (updateError) throw updateError;
+    // Envoi de l'e-mail via le service dynamique emailSender
+    let origin = 'http://localhost:3000';
+    try {
+      const headersList = await headers();
+      const host = headersList.get('host') || 'localhost:3000';
+      const protocol = headersList.get('x-forwarded-proto') || 'http';
+      origin = `${protocol}://${host}`;
+    } catch (e) {
+      console.warn('[EMAIL] headers() appelé hors contexte de requête. Utilisation de l\'origine par défaut.');
+    }
+    const inviteUrl = `${origin}/invite/${token}`;
 
-    // Simulate email send
-    await admin.from('email_messages').insert({
-      organization_id: orgId,
-      to_emails: [invite.email],
+    const htmlBody = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="color: #0f172a; margin-bottom: 16px;">Relance : Rejoignez l'organisation ${orgName} sur VoxPilot</h2>
+        <p style="color: #334155; font-size: 14px; line-height: 1.5;">
+          Bonjour,<br/><br/>
+          Ceci est un rappel de votre invitation à rejoindre l'organisation <strong>${orgName}</strong> sur VoxPilot.<br/>
+          Pour accepter l'invitation, veuillez cliquer sur le bouton ci-dessous :
+        </p>
+        <div style="margin: 24px 0; text-align: center;">
+          <a href="${inviteUrl}" style="background-color: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 14px; display: inline-block;">
+            Accepter l'invitation
+          </a>
+        </div>
+        <p style="color: #64748b; font-size: 12px; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+          Si le bouton ne fonctionne pas, vous pouvez copier et coller le lien suivant dans votre navigateur :<br/>
+          <a href="${inviteUrl}" style="color: #0284c7;">${inviteUrl}</a>
+        </p>
+      </div>
+    `;
+
+    await sendEmail({
+      userId: user.id,
+      organizationId: orgId,
+      to: [invite.email],
       subject: `Relance : Invitation à rejoindre BlueMargin`,
-      status: 'logged',
-      sent_by: user.id,
-      sent_at: new Date().toISOString(),
-      provider: 'console',
-      provider_message_id: token
+      html: htmlBody,
+      customMessageId: token
     });
 
     // Log to audit log
@@ -806,6 +872,85 @@ export async function updateCrmSettings(orgSlug: string, data: CrmSettingsInput)
   } catch (err) {
     console.error('Error updating CRM settings:', err);
     return { error: err instanceof Error ? err.message : 'Impossible de modifier les paramètres CRM.' };
+  }
+}
+
+export async function getUserSmtpConfig() {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Utilisateur non connecté.');
+
+    const { data, error } = await supabase
+      .from('user_email_configs')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    if (!data) return { data: null };
+
+    const decryptedPassword = decrypt(data.smtp_pass);
+
+    return {
+      data: {
+        smtpHost: data.smtp_host,
+        smtpPort: data.smtp_port,
+        smtpUser: data.smtp_user,
+        smtpPass: decryptedPassword,
+        senderName: data.sender_name
+      }
+    };
+  } catch (err) {
+    console.error('Error fetching user SMTP config:', err);
+    return { error: err instanceof Error ? err.message : 'Impossible de charger la configuration SMTP.' };
+  }
+}
+
+export async function saveUserSmtpConfig(formData: FormData) {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Utilisateur non connecté.');
+
+    const smtpHost = formData.get('smtpHost') as string;
+    const smtpPortRaw = formData.get('smtpPort') as string;
+    const smtpUser = formData.get('smtpUser') as string;
+    const smtpPass = formData.get('smtpPass') as string;
+    const senderName = formData.get('senderName') as string;
+
+    if (!smtpHost || !smtpPortRaw || !smtpUser || !smtpPass || !senderName) {
+      throw new Error('Tous les champs de configuration SMTP sont obligatoires.');
+    }
+
+    const smtpPort = parseInt(smtpPortRaw, 10);
+    if (isNaN(smtpPort)) {
+      throw new Error('Le port SMTP doit être un nombre.');
+    }
+
+    const encryptedPassword = encrypt(smtpPass);
+
+    const { error } = await supabase
+      .from('user_email_configs')
+      .upsert({
+        user_id: user.id,
+        smtp_host: smtpHost,
+        smtp_port: smtpPort,
+        smtp_user: smtpUser,
+        smtp_pass: encryptedPassword,
+        sender_name: senderName,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error saving user SMTP config:', err);
+    return { error: err instanceof Error ? err.message : 'Impossible d\'enregistrer la configuration SMTP.' };
   }
 }
 

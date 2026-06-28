@@ -21,7 +21,8 @@ import {
   resendInvitation, 
   revokeInvitation, 
   updateMemberRole, 
-  updateMemberStatus 
+  updateMemberStatus,
+  saveUserSmtpConfig
 } from '@/actions/settings';
 import { createCategory, updateCategory, deleteCategory } from '@/actions/categories';
 
@@ -77,6 +78,13 @@ interface SettingsClientProps {
   invitations: PendingInvitation[];
   isDevOrLog?: boolean;
   initialCategories: Category[];
+  initialSmtpConfig: {
+    smtpHost: string;
+    smtpPort: number;
+    smtpUser: string;
+    smtpPass: string;
+    senderName: string;
+  } | null;
 }
 
 export default function SettingsClient({
@@ -88,6 +96,7 @@ export default function SettingsClient({
   invitations,
   isDevOrLog = false,
   initialCategories,
+  initialSmtpConfig,
 }: SettingsClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -96,6 +105,38 @@ export default function SettingsClient({
   useEffect(() => {
     setNow(Date.now());
   }, []);
+
+  const [smtpHost, setSmtpHost] = useState(initialSmtpConfig?.smtpHost || '');
+  const [smtpPort, setSmtpPort] = useState(initialSmtpConfig?.smtpPort?.toString() || '587');
+  const [smtpUser, setSmtpUser] = useState(initialSmtpConfig?.smtpUser || '');
+  const [smtpPass, setSmtpPass] = useState(initialSmtpConfig?.smtpPass || '');
+  const [senderName, setSenderName] = useState(initialSmtpConfig?.senderName || '');
+  const [smtpError, setSmtpError] = useState<string | null>(null);
+  const [smtpSuccess, setSmtpSuccess] = useState<string | null>(null);
+
+  const handleSaveSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSmtpError(null);
+    setSmtpSuccess(null);
+
+    const formData = new FormData();
+    formData.append('smtpHost', smtpHost);
+    formData.append('smtpPort', smtpPort);
+    formData.append('smtpUser', smtpUser);
+    formData.append('smtpPass', smtpPass);
+    formData.append('senderName', senderName);
+
+    startTransition(async () => {
+      try {
+        const res = await saveUserSmtpConfig(formData);
+        if (res.error) throw new Error(res.error);
+        setSmtpSuccess('Configuration de messagerie SMTP enregistrée avec succès.');
+        router.refresh();
+      } catch (err: any) {
+        setSmtpError(err.message || 'Impossible de sauvegarder la configuration.');
+      }
+    });
+  };
 
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [catName, setCatName] = useState('');
@@ -448,6 +489,10 @@ export default function SettingsClient({
           <TabsTrigger value="categories" className="cursor-pointer flex items-center gap-1.5 py-1.5 px-3">
             <FolderTree className="h-4 w-4" />
             {"Catégories de produits"}
+          </TabsTrigger>
+          <TabsTrigger value="email" className="cursor-pointer flex items-center gap-1.5 py-1.5 px-3">
+            <Mail className="h-4 w-4" />
+            {"Messagerie personnelle"}
           </TabsTrigger>
         </TabsList>
 
@@ -1053,6 +1098,114 @@ export default function SettingsClient({
               </Card>
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="email" className="outline-none">
+          <Card className="bg-white border-slate-200 shadow-md rounded-2xl p-6 space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                Messagerie personnelle (SMTP)
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Configurez votre propre boîte mail sortante. Une fois renseignée, tous les e-mails que vous enverrez depuis le CRM (devis aux clients, invitations) partiront de votre véritable adresse mail au lieu d'une adresse de simulation.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveSmtp} className="space-y-4 max-w-xl">
+              {smtpError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  {smtpError}
+                </div>
+              )}
+              {smtpSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  {smtpSuccess}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="smtpHost" className="text-xs font-semibold text-slate-700">Serveur SMTP *</Label>
+                  <Input
+                    id="smtpHost"
+                    type="text"
+                    required
+                    placeholder="ex: smtp.office365.com, ssl0.ovh.net"
+                    value={smtpHost}
+                    onChange={(e) => setSmtpHost(e.target.value)}
+                    className="border-slate-200 text-xs bg-white text-slate-900"
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="smtpPort" className="text-xs font-semibold text-slate-700">Port SMTP *</Label>
+                  <Input
+                    id="smtpPort"
+                    type="text"
+                    required
+                    placeholder="ex: 587, 465"
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(e.target.value)}
+                    className="border-slate-200 text-xs bg-white text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="smtpUser" className="text-xs font-semibold text-slate-700">Adresse e-mail (Utilisateur) *</Label>
+                <Input
+                  id="smtpUser"
+                  type="email"
+                  required
+                  placeholder="ex: dimitri@maisonfumesse.be"
+                  value={smtpUser}
+                  onChange={(e) => setSmtpUser(e.target.value)}
+                  className="border-slate-200 text-xs bg-white text-slate-900"
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="smtpPass" className="text-xs font-semibold text-slate-700">Mot de passe de messagerie *</Label>
+                <Input
+                  id="smtpPass"
+                  type="password"
+                  required
+                  placeholder="••••••••••••••••"
+                  value={smtpPass}
+                  onChange={(e) => setSmtpPass(e.target.value)}
+                  className="border-slate-200 text-xs bg-white text-slate-900"
+                />
+                <p className="text-[10px] text-slate-500 italic">
+                  Note : Pour Gmail/Outlook, il est recommandé d'utiliser un « Mot de passe d'application » généré depuis votre compte de messagerie.
+                </p>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="senderName" className="text-xs font-semibold text-slate-700">Nom de l'expéditeur affiché *</Label>
+                <Input
+                  id="senderName"
+                  type="text"
+                  required
+                  placeholder="ex: Dimitri Puche - Maison Fumesse"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  className="border-slate-200 text-xs bg-white text-slate-900"
+                />
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  type="submit"
+                  disabled={isPending}
+                  className="bg-primary hover:bg-primary/90 text-white font-bold text-xs px-4 py-2 cursor-pointer h-9"
+                >
+                  {isPending ? 'Enregistrement...' : 'Enregistrer la configuration'}
+                </Button>
+              </div>
+            </form>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
