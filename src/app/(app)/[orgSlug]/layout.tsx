@@ -18,6 +18,7 @@ import {
 import OrgSwitcher from '@/components/OrgSwitcher';
 import UserProfileDropdown from '@/components/UserProfileDropdown';
 import HeaderSearch from '@/components/HeaderSearch';
+import VoiceAssistantWidget from '@/components/VoiceAssistantWidget';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -182,6 +183,7 @@ export default async function AppLayout({ children, params }: AppLayoutProps) {
           {children}
         </main>
       </div>
+      <VoiceAssistantWidget orgSlug={orgSlug} />
     </div>
   );
 }
