@@ -97,39 +97,29 @@ export async function updateLocation(orgSlug: string, customerId: string, locati
     const supabase = await createClient();
     const orgId = await getOrgId(supabase, orgSlug);
 
-    const name = formData.get('name') as string;
-    const locationType = formData.get('locationType') as string;
+    const input: Partial<LocationInput> & { isActive?: boolean } = {};
+    if (formData.has('name')) input.name = formData.get('name') as string;
+    if (formData.has('locationType')) input.locationType = formData.get('locationType') as string;
+
     const line1 = formData.get('line1') as string;
-    const line2 = formData.get('line2') as string;
     const postalCode = formData.get('postalCode') as string;
     const city = formData.get('city') as string;
-    const region = formData.get('region') as string;
-    const countryCode = formData.get('countryCode') as string;
-    const phone = formData.get('phone') as string;
-    const email = formData.get('email') as string;
-    const deliveryNotes = formData.get('deliveryNotes') as string;
-    const isPrimary = formData.get('isPrimary') === 'true';
-    const isActive = formData.get('isActive') !== 'false'; // default true
+    if (formData.has('line1') || formData.has('postalCode') || formData.has('city')) {
+      input.address = (line1 || postalCode || city) ? {
+        line1,
+        line2: (formData.get('line2') as string) || undefined,
+        postalCode,
+        city,
+        region: (formData.get('region') as string) || undefined,
+        countryCode: (formData.get('countryCode') as string) || 'BE',
+      } : undefined;
+    }
 
-    const address = (line1 || postalCode || city) ? {
-      line1,
-      line2: line2 || undefined,
-      postalCode,
-      city,
-      region: region || undefined,
-      countryCode: countryCode || 'BE',
-    } : undefined;
-
-    const input: Partial<LocationInput> & { isActive?: boolean } = {
-      name,
-      locationType,
-      address,
-      phone: phone !== undefined ? (phone || null) : undefined,
-      email: email !== undefined ? (email || null) : undefined,
-      deliveryNotes: deliveryNotes !== undefined ? (deliveryNotes || null) : undefined,
-      isPrimary,
-      isActive,
-    };
+    if (formData.has('phone')) input.phone = formData.get('phone') as string || null;
+    if (formData.has('email')) input.email = formData.get('email') as string || null;
+    if (formData.has('deliveryNotes')) input.deliveryNotes = formData.get('deliveryNotes') as string || null;
+    if (formData.has('isPrimary')) input.isPrimary = formData.get('isPrimary') === 'true';
+    if (formData.has('isActive')) input.isActive = formData.get('isActive') !== 'false';
 
     const location = await LocationService.updateLocation(supabase, orgId, locationId, input);
 

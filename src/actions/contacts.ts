@@ -102,43 +102,29 @@ export async function updateContact(orgSlug: string, customerId: string, contact
     const supabase = await createClient();
     const orgId = await getOrgId(supabase, orgSlug);
 
-    const firstName = formData.get('firstName') as string;
-    const lastName = formData.get('lastName') as string;
-    const locationId = formData.get('locationId') as string;
-    const jobTitle = formData.get('jobTitle') as string;
-    const department = formData.get('department') as string;
-    const email = formData.get('email') as string;
-    const secondaryEmail = formData.get('secondaryEmail') as string;
-    const phone = formData.get('phone') as string;
-    const mobile = formData.get('mobile') as string;
-    const preferredChannel = formData.get('preferredChannel') as string;
-    const language = formData.get('language') as string;
-    const decisionRole = formData.get('decisionRole') as string;
-    const influenceLevel = formData.get('influenceLevel') as string;
-    const notes = formData.get('notes') as string;
-    const isPrimary = formData.get('isPrimary') === 'true';
-    const isActive = formData.get('isActive') !== 'false';
-    const doNotContact = formData.get('doNotContact') === 'true';
+    const input: Partial<ContactInput> & { isActive?: boolean } = {};
+    if (formData.has('firstName')) input.firstName = formData.get('firstName') as string || null;
+    if (formData.has('lastName')) input.lastName = formData.get('lastName') as string || null;
+    if (formData.has('locationId')) input.locationId = formData.get('locationId') as string || null;
+    if (formData.has('jobTitle')) input.jobTitle = formData.get('jobTitle') as string || null;
+    if (formData.has('department')) input.department = formData.get('department') as string || null;
+    if (formData.has('email')) input.email = formData.get('email') as string || null;
+    if (formData.has('secondaryEmail')) input.secondaryEmail = formData.get('secondaryEmail') as string || null;
+    if (formData.has('phone')) input.phone = formData.get('phone') as string || null;
+    if (formData.has('mobile')) input.mobile = formData.get('mobile') as string || null;
+    if (formData.has('preferredChannel')) input.preferredChannel = formData.get('preferredChannel') as string || null;
+    if (formData.has('language')) input.language = formData.get('language') as string;
+    if (formData.has('decisionRole')) input.decisionRole = formData.get('decisionRole') as string;
+    if (formData.has('influenceLevel')) input.influenceLevel = formData.get('influenceLevel') as string;
+    if (formData.has('notes')) input.notes = formData.get('notes') as string || null;
 
-    const input: Partial<ContactInput> & { isActive?: boolean } = {
-      firstName: firstName !== undefined ? (firstName || null) : undefined,
-      lastName: lastName !== undefined ? (lastName || null) : undefined,
-      locationId: locationId !== undefined ? (locationId || null) : undefined,
-      jobTitle: jobTitle !== undefined ? (jobTitle || null) : undefined,
-      department: department !== undefined ? (department || null) : undefined,
-      email: email !== undefined ? (email || null) : undefined,
-      secondaryEmail: secondaryEmail !== undefined ? (secondaryEmail || null) : undefined,
-      phone: phone !== undefined ? (phone || null) : undefined,
-      mobile: mobile !== undefined ? (mobile || null) : undefined,
-      preferredChannel: preferredChannel !== undefined ? (preferredChannel || null) : undefined,
-      language: language !== undefined ? language : undefined,
-      decisionRole: decisionRole !== undefined ? decisionRole : undefined,
-      influenceLevel: influenceLevel !== undefined ? influenceLevel : undefined,
-      notes: notes !== undefined ? (notes || null) : undefined,
-      isPrimary,
-      isActive,
-      doNotContact,
-    };
+    const isPrimary = formData.has('isPrimary') ? formData.get('isPrimary') === 'true' : undefined;
+    const isActive = formData.has('isActive') ? formData.get('isActive') !== 'false' : undefined;
+    const doNotContact = formData.has('doNotContact') ? formData.get('doNotContact') === 'true' : undefined;
+
+    if (isPrimary !== undefined) input.isPrimary = isPrimary;
+    if (isActive !== undefined) input.isActive = isActive;
+    if (doNotContact !== undefined) input.doNotContact = doNotContact;
 
     const { data: currentContact } = await supabase
       .from('contacts')

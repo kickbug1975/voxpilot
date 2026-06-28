@@ -118,22 +118,14 @@ export async function updateTask(orgSlug: string, taskId: string, formData: Form
     const actorUserId = userData?.user?.id;
     if (!actorUserId) throw new Error('Utilisateur non connecté.');
 
-    const title = formData.get('title') as string;
-    const description = formData.get('description') as string;
-    const taskType = formData.get('taskType') as any;
-    const priority = formData.get('priority') as any;
-    const dueAt = formData.get('dueAt') as string;
-    const assignedTo = formData.get('assignedTo') as string;
-    const status = formData.get('status') as any;
-
     const input: Partial<TaskInput> & { status?: any } = {};
-    if (title !== undefined) input.title = title;
-    if (description !== undefined) input.description = description;
-    if (taskType !== undefined) input.taskType = taskType;
-    if (priority !== undefined) input.priority = priority;
-    if (dueAt !== undefined) input.dueAt = dueAt;
-    if (assignedTo !== undefined) input.assignedTo = assignedTo;
-    if (status !== undefined) input.status = status;
+    if (formData.has('title')) input.title = formData.get('title') as string;
+    if (formData.has('description')) input.description = formData.get('description') as string || null;
+    if (formData.has('taskType')) input.taskType = formData.get('taskType') as any;
+    if (formData.has('priority')) input.priority = formData.get('priority') as any;
+    if (formData.has('dueAt')) input.dueAt = formData.get('dueAt') as string;
+    if (formData.has('assignedTo')) input.assignedTo = formData.get('assignedTo') as string;
+    if (formData.has('status')) input.status = formData.get('status') as any;
 
     const task = await TaskService.updateTask(supabase, orgId, taskId, input, actorUserId);
 

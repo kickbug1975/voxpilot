@@ -147,22 +147,17 @@ export async function updateActivity(orgSlug: string, activityId: string, formDa
 
     const actorRole = await getUserRole(supabase, orgId, actorUserId);
 
-    const subject = formData.get('subject') as string;
-    const content = formData.get('content') as string;
-    const activityType = formData.get('activityType') as any;
-    const direction = formData.get('direction') as any;
-    const outcome = formData.get('outcome') as any;
-    const occurredAt = formData.get('occurredAt') as string;
-    const durationMinutes = formData.get('durationMinutes') ? parseInt(formData.get('durationMinutes') as string) : null;
-
     const input: Partial<Omit<ActivityInput, 'nextTask'>> = {};
-    if (subject !== undefined) input.subject = subject;
-    if (content !== undefined) input.content = content;
-    if (activityType !== undefined) input.activityType = activityType;
-    if (direction !== undefined) input.direction = direction;
-    if (outcome !== undefined) input.outcome = outcome;
-    if (occurredAt !== undefined) input.occurredAt = occurredAt;
-    if (durationMinutes !== undefined) input.durationMinutes = durationMinutes;
+    if (formData.has('subject')) input.subject = formData.get('subject') as string;
+    if (formData.has('content')) input.content = formData.get('content') as string || null;
+    if (formData.has('activityType')) input.activityType = formData.get('activityType') as any;
+    if (formData.has('direction')) input.direction = formData.get('direction') as any;
+    if (formData.has('outcome')) input.outcome = formData.get('outcome') as any || null;
+    if (formData.has('occurredAt')) input.occurredAt = formData.get('occurredAt') as string;
+    if (formData.has('durationMinutes')) {
+      const dm = formData.get('durationMinutes');
+      input.durationMinutes = dm ? parseInt(dm as string) : null;
+    }
 
     const activity = await ActivityService.updateActivity(supabase, orgId, activityId, input, actorUserId, actorRole);
 
