@@ -90,7 +90,7 @@ Règles de détection et d'extraction :
         'X-Title': 'VoxPilot Voice Assistant'
       },
       body: JSON.stringify({
-        model: 'google/gemini-flash-1.5',
+        model: 'google/gemini-3.5-flash',
         messages: [
           {
             role: 'system',
