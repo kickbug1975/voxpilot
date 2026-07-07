@@ -13,7 +13,8 @@ import {
   Settings,
   AlertTriangle,
   Calendar,
-  CheckSquare
+  CheckSquare,
+  ShoppingCart
 } from 'lucide-react';
 import OrgSwitcher from '@/components/OrgSwitcher';
 import UserProfileDropdown from '@/components/UserProfileDropdown';
@@ -107,6 +108,7 @@ export default async function AppLayout({ children, params }: AppLayoutProps) {
     { name: 'Tarifs & Imports', href: `/${orgSlug}/imports`, icon: Upload },
     { name: 'Règles de marge', href: `/${orgSlug}/margins`, icon: Percent },
     { name: 'Offres & Devis', href: `/${orgSlug}/quotes`, icon: FileText },
+    { name: 'Commandes', href: `/${orgSlug}/orders`, icon: ShoppingCart },
     { name: 'Alertes', href: `/${orgSlug}/alerts`, icon: AlertTriangle, badgeCount: unreadAlertsCount || 0 },
     { name: 'Paramètres', href: `/${orgSlug}/settings`, icon: Settings },
   ];
