@@ -45,6 +45,31 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
     console.error('Error loading members for customer details page:', err);
   }
 
+  // Fetch tasks associated with this customer
+  let tasks: any[] = [];
+  try {
+    const { data: customerTasks } = await supabase
+      .from('tasks')
+      .select('*, profiles:assigned_to_user_id(full_name)')
+      .eq('customer_id', id)
+      .order('created_at', { ascending: false });
+    
+    if (customerTasks) {
+      tasks = customerTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        task_type: t.task_type,
+        due_at: t.due_at,
+        assigned_to_user_id: t.assigned_to_user_id,
+        assigned_to_name: (t.profiles as any)?.full_name || 'Non assigné'
+      }));
+    }
+  } catch (err) {
+    console.error('Error loading tasks for customer details page:', err);
+  }
+
   return (
     <CustomerDetailsClient 
       orgSlug={orgSlug} 
@@ -52,6 +77,7 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
       initialCustomer={customer as any} 
       error={error || null} 
       members={members}
+      initialTasks={tasks}
     />
   );
 }

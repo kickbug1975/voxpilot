@@ -177,7 +177,12 @@ export default function CustomersPageClient({
                   <TableCell className="font-medium text-slate-900">
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${customer.is_active ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                      {customer.name}
+                      <Link 
+                        href={`/${orgSlug}/customers/${customer.id}`}
+                        className="hover:underline hover:text-brand-600 font-semibold transition-colors cursor-pointer"
+                      >
+                        {customer.name}
+                      </Link>
                     </div>
                   </TableCell>
                   <TableCell className="text-slate-600 font-mono text-xs">

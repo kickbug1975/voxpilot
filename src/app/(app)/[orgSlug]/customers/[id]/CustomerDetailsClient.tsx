@@ -21,6 +21,7 @@ import {
   pinActivity 
 } from '@/actions/activities';
 import { getCustomerTimeline } from '@/actions/timeline';
+import { createTask, updateTask, completeTask } from '@/actions/tasks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -58,6 +59,7 @@ import {
   Calendar, 
   Sparkles, 
   Check, 
+  CheckCircle,
   Trash2, 
   Edit, 
   MessageSquare, 
@@ -181,12 +183,24 @@ interface TimelineEntry {
   };
 }
 
+interface Task {
+  id: string;
+  title: string;
+  status: 'open' | 'in_progress' | 'completed' | 'cancelled';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  task_type: string;
+  due_at: string | null;
+  assigned_to_user_id: string | null;
+  assigned_to_name: string;
+}
+
 interface CustomerDetailsClientProps {
   orgSlug: string;
   customerId: string;
   initialCustomer: Customer | null;
   error: string | null;
   members: Member[];
+  initialTasks: Task[];
 }
 
 export default function CustomerDetailsClient({
@@ -195,9 +209,12 @@ export default function CustomerDetailsClient({
   initialCustomer,
   error: fetchError,
   members,
+  initialTasks = [],
 }: CustomerDetailsClientProps) {
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [error, setError] = useState<string | null>(fetchError);
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -273,6 +290,72 @@ export default function CustomerDetailsClient({
       </div>
     );
   }
+
+  const handleToggleTask = (taskId: string, currentStatus: string) => {
+    setError(null);
+    startTransition(async () => {
+      let result;
+      if (currentStatus === 'completed') {
+        const formData = new FormData();
+        formData.append('status', 'open');
+        result = await updateTask(orgSlug, taskId, formData);
+      } else {
+        result = await completeTask(orgSlug, taskId, 'Complété depuis la fiche client');
+      }
+
+      if (result.error) {
+        setError(result.error);
+      } else if (result.success && result.data) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { 
+          ...t, 
+          status: result.data.status 
+        } : t));
+        
+        const timelineResult = await getCustomerTimeline(customerId);
+        if (timelineResult.data) {
+          setTimeline(timelineResult.data);
+        }
+      }
+    });
+  };
+
+  const handleAddTask = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    formData.append('customerId', customerId);
+
+    startTransition(async () => {
+      const result = await createTask(orgSlug, formData);
+      if (result.error) {
+        setError(result.error);
+      } else if (result.success && result.data) {
+        setIsAddTaskOpen(false);
+        
+        const assignedId = formData.get('assignedTo') as string;
+        const member = members.find(m => m.id === assignedId);
+        const assignedName = member ? member.fullName : 'Non assigné';
+
+        const newTask: Task = {
+          id: result.data.id,
+          title: result.data.title,
+          status: result.data.status,
+          priority: result.data.priority,
+          task_type: result.data.task_type,
+          due_at: result.data.due_at,
+          assigned_to_user_id: result.data.assigned_to,
+          assigned_to_name: assignedName
+        };
+
+        setTasks(prev => [newTask, ...prev]);
+
+        const timelineResult = await getCustomerTimeline(customerId);
+        if (timelineResult.data) {
+          setTimeline(timelineResult.data);
+        }
+      }
+    });
+  };
 
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -742,6 +825,9 @@ export default function CustomerDetailsClient({
           </TabsTrigger>
           <TabsTrigger value="quotes" className="rounded-md px-4 py-1.5 text-sm font-medium cursor-pointer">
             Historique des offres ({customer.quotes?.length || 0})
+          </TabsTrigger>
+          <TabsTrigger value="tasks" className="rounded-md px-4 py-1.5 text-sm font-medium cursor-pointer">
+            Tâches CRM ({tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length})
           </TabsTrigger>
           <TabsTrigger value="edit" className="rounded-md px-4 py-1.5 text-sm font-medium cursor-pointer">
             Modifier la fiche
@@ -1480,7 +1566,180 @@ export default function CustomerDetailsClient({
           </div>
         </TabsContent>
 
-        {/* Tab 3: Edit Form */}
+        {/* Tab: Tasks CRM */}
+        <TabsContent value="tasks" className="space-y-4 outline-none">
+          <div className="flex justify-between items-center bg-slate-50/50 p-4 border border-slate-200/60 rounded-xl">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Tâches CRM</h3>
+              <p className="text-xs text-slate-500">Gérez les rappels, rendez-vous et tâches logistiques de ce client.</p>
+            </div>
+            <Button onClick={() => setIsAddTaskOpen(true)} className="bg-brand-600 hover:bg-brand-700 text-white font-semibold cursor-pointer">
+              <Plus className="h-4 w-4 mr-1.5" />
+              Nouvelle tâche
+            </Button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            {tasks.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 font-medium text-sm">
+                Aucune tâche enregistrée pour ce client.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="font-semibold text-slate-700 w-1/2">Titre de la tâche</TableHead>
+                    <TableHead className="font-semibold text-slate-700">Type</TableHead>
+                    <TableHead className="font-semibold text-slate-700">Échéance</TableHead>
+                    <TableHead className="font-semibold text-slate-700">Priorité</TableHead>
+                    <TableHead className="font-semibold text-slate-700">Assigné à</TableHead>
+                    <TableHead className="font-semibold text-slate-700 text-right">Statut</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tasks.map((t) => {
+                    const isCompleted = t.status === 'completed';
+                    const isCancelled = t.status === 'cancelled';
+                    const isOverdue = t.due_at && new Date(t.due_at).getTime() < Date.now() && !isCompleted && !isCancelled;
+
+                    return (
+                      <TableRow key={t.id} className={`hover:bg-slate-50/50 ${isCompleted ? 'bg-slate-50/30' : ''}`}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => handleToggleTask(t.id, t.status)}
+                              disabled={isPending}
+                              className="focus:outline-none shrink-0"
+                              title={isCompleted ? "Remettre en cours" : "Marquer comme complétée"}
+                            >
+                              {isCompleted ? (
+                                <CheckCircle className="h-5 w-5 text-emerald-500 fill-emerald-50 cursor-pointer" />
+                              ) : (
+                                <div className={`h-5 w-5 rounded-full border-2 ${isOverdue ? 'border-rose-400 hover:border-rose-500' : 'border-slate-300 hover:border-slate-400'} bg-white transition-colors cursor-pointer`} />
+                              )}
+                            </button>
+                            <span className={`${isCompleted ? 'line-through text-slate-400 font-normal' : 'text-slate-900 font-semibold'}`}>
+                              {t.title}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-slate-600 text-xs capitalize">
+                          {t.task_type === 'call' ? '📞 Appel' :
+                           t.task_type === 'email' ? '✉️ E-mail' :
+                           t.task_type === 'meeting' ? '🤝 Réunion' :
+                           t.task_type === 'preparation' ? '📦 Préparation' : t.task_type}
+                        </TableCell>
+                        <TableCell className={`text-xs ${isOverdue ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
+                          {t.due_at ? new Date(t.due_at).toLocaleString('fr-FR', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'Europe/Brussels'
+                          }) : '-'}
+                        </TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                            t.priority === 'urgent' ? 'bg-rose-100 text-rose-800 border border-rose-200' :
+                            t.priority === 'high' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                            'bg-slate-100 text-slate-800 border border-slate-200'
+                          }`}>
+                            {t.priority}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-slate-600 text-xs">
+                          {t.assigned_to_name}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            isCompleted ? 'bg-emerald-50 text-emerald-700' :
+                            isCancelled ? 'bg-slate-100 text-slate-500' :
+                            'bg-amber-50 text-amber-700 border border-amber-100'
+                          }`}>
+                            {isCompleted ? 'Complété' : isCancelled ? 'Annulé' : 'En attente'}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Dialogue de création de tâche */}
+        <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+          <DialogContent className="sm:max-w-[450px] bg-white border border-slate-200">
+            <form onSubmit={handleAddTask}>
+              <DialogHeader className="border-b border-slate-100 pb-4">
+                <DialogTitle className="text-xl font-bold text-slate-900">Nouvelle tâche CRM</DialogTitle>
+                <DialogDescription className="text-slate-400 text-sm mt-1">
+                  Créez une tâche pour ce client. Elle sera visible dans son historique et sur le tableau de bord global.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="py-4 space-y-4">
+                <div className="grid gap-1">
+                  <Label htmlFor="title" className="text-xs font-semibold text-slate-700">Titre de la tâche *</Label>
+                  <Input id="title" name="title" required placeholder="ex: Relancer pour le devis moules" className="border-slate-200" />
+                </div>
+
+                <div className="grid gap-1">
+                  <Label htmlFor="description" className="text-xs font-semibold text-slate-700">Description / Détails</Label>
+                  <Input id="description" name="description" placeholder="ex: Discuter des prix de gros" className="border-slate-200" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-1">
+                    <Label htmlFor="taskType" className="text-xs font-semibold text-slate-700">Type de tâche</Label>
+                    <select id="taskType" name="taskType" defaultValue="call" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-xs focus-visible:ring-1">
+                      <option value="call">📞 Appel</option>
+                      <option value="email">✉️ E-mail</option>
+                      <option value="meeting">🤝 Réunion</option>
+                      <option value="preparation">📦 Préparation</option>
+                      <option value="other">⚙️ Autre</option>
+                    </select>
+                  </div>
+
+                  <div className="grid gap-1">
+                    <Label htmlFor="priority" className="text-xs font-semibold text-slate-700">Priorité</Label>
+                    <select id="priority" name="priority" defaultValue="normal" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-xs focus-visible:ring-1">
+                      <option value="low">Faible</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">Élevé</option>
+                      <option value="urgent">Urgent 🚨</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid gap-1">
+                  <Label htmlFor="dueAt" className="text-xs font-semibold text-slate-700">Date d'échéance</Label>
+                  <Input id="dueAt" name="dueAt" type="datetime-local" className="border-slate-200" />
+                </div>
+
+                <div className="grid gap-1">
+                  <Label htmlFor="assignedTo" className="text-xs font-semibold text-slate-700">Assigné à</Label>
+                  <select id="assignedTo" name="assignedTo" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-xs focus-visible:ring-1">
+                    {members.map(m => (
+                      <option key={m.id} value={m.id}>{m.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <DialogFooter className="border-t border-slate-100 pt-4">
+                <DialogClose render={<Button type="button" variant="outline" className="border-slate-200">Annuler</Button>} />
+                <Button type="submit" disabled={isPending} className="bg-brand-600 hover:bg-brand-700 text-white font-semibold cursor-pointer">
+                  Créer la tâche
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      
+      {/* Tab 3: Edit Form */}
         <TabsContent value="edit" className="outline-none">
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden p-6 max-w-xl">
             <form onSubmit={handleUpdate} className="space-y-4">
