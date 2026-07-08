@@ -43,7 +43,7 @@ async function run() {
   }
 
   const envLines = fs.readFileSync(envPath, 'utf8').split('\n');
-  const envsToUpdate: { key: string, value: string } = [];
+  const envsToUpdate: { key: string, value: string }[] = [];
 
   for (const line of envLines) {
     const trimmed = line.trim();
