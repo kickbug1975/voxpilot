@@ -59,7 +59,6 @@ export class CustomerCrmService {
         segment: input.segment || 'retail',
         customer_since: lifecycleStatus === 'customer' ? new Date().toISOString().split('T')[0] : null,
         is_active: true,
-        created_by: actorUserId,
         updated_by: actorUserId,
       })
       .select()
