@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
-import { updateCustomer } from '@/actions/customers';
+import { updateCustomer, getCustomers } from '@/actions/customers';
+import { mergeCustomersAction } from '@/actions/mergeCustomers';
 import { 
   createLocation, 
   updateLocation, 
@@ -71,7 +72,8 @@ import {
   Beaker,
   AlertCircle,
   FileText,
-  Clock
+  Clock,
+  GitMerge
 } from 'lucide-react';
 
 interface MarginRule {
@@ -234,6 +236,57 @@ export default function CustomerDetailsClient({
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [editingActivity, setEditingActivity] = useState<TimelineEntry | null>(null);
+
+  // States pour la fusion de clients
+  const [allCustomers, setAllCustomers] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTargetId, setSelectedTargetId] = useState('');
+  const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+
+  // Charger tous les clients pour la fusion lorsque le dialogue s'ouvre
+  useEffect(() => {
+    if (isMergeDialogOpen) {
+      const loadAllCustomers = async () => {
+        try {
+          const result = await getCustomers(orgSlug);
+          if (result && Array.isArray(result)) {
+            // Filtrer pour exclure le client actuel
+            setAllCustomers(result.filter((c: any) => c.id !== customerId));
+          }
+        } catch (err) {
+          console.error("Erreur de chargement des clients :", err);
+        }
+      };
+      loadAllCustomers();
+    }
+  }, [isMergeDialogOpen, orgSlug, customerId]);
+
+  const handleMergeConfirm = async () => {
+    if (!selectedTargetId) return;
+    setIsMerging(true);
+    setError(null);
+    try {
+      const result = await mergeCustomersAction(orgSlug, customerId, selectedTargetId);
+      if (result.success) {
+        setIsMergeDialogOpen(false);
+        // Rediriger vers la fiche du client fusionné cible
+        window.location.href = `/${orgSlug}/customers/${selectedTargetId}`;
+      } else {
+        setError(result.error || 'Erreur lors de la fusion des fiches.');
+        setIsMerging(false);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Une erreur inattendue est survenue.');
+      setIsMerging(false);
+    }
+  };
+
+  const filteredCustomers = allCustomers.filter(c =>
+    c.legal_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.trade_name && c.trade_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (c.code && c.code.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   // Load timeline and current user ID
   useEffect(() => {
@@ -790,9 +843,20 @@ export default function CustomerDetailsClient({
               {getPotentialLabel(customer.potential_level)}
             </span>
           </div>
-          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${customer.is_active ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-100 text-slate-600'}`}>
-            {customer.is_active ? 'Actif' : 'Inactif'}
-          </span>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs border-dashed text-slate-600 hover:text-slate-900 flex items-center gap-1.5"
+              onClick={() => setIsMergeDialogOpen(true)}
+            >
+              <GitMerge className="h-3.5 w-3.5" />
+              Fusionner
+            </Button>
+            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${customer.is_active ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' : 'bg-slate-100 text-slate-600'}`}>
+              {customer.is_active ? 'Actif' : 'Inactif'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -2420,6 +2484,63 @@ export default function CustomerDetailsClient({
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE FUSION DE CLIENTS */}
+      <Dialog open={isMergeDialogOpen} onOpenChange={setIsMergeDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] border-slate-200">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-600">
+              <GitMerge className="h-5 w-5" />
+              Fusionner le client "{customer.name}"
+            </DialogTitle>
+            <DialogDescription className="text-slate-500">
+              Cette action est irréversible. Toutes les commandes, tâches, activités, adresses et contacts de <strong>{customer.name}</strong> seront transférés vers le client cible sélectionné ci-dessous, puis cette fiche sera définitivement supprimée.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Rechercher le client cible (à conserver)</Label>
+              <Input
+                placeholder="Tapez le nom d'un client..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="border-slate-200"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs font-semibold text-slate-700">Sélectionner dans la liste ({filteredCustomers.length} résultats)</Label>
+              <select
+                className="flex h-9 w-full rounded-md border border-slate-200 bg-transparent px-3 py-1 text-sm shadow-xs"
+                value={selectedTargetId}
+                onChange={(e) => setSelectedTargetId(e.target.value)}
+              >
+                <option value="">-- Choisir le client cible --</option>
+                {filteredCustomers.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.legal_name} {c.trade_name ? `(${c.trade_name})` : ''} {c.code ? `[${c.code}]` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsMergeDialogOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              disabled={!selectedTargetId || isMerging}
+              onClick={handleMergeConfirm}
+              className="bg-rose-600 text-white hover:bg-rose-700 flex items-center gap-1.5"
+            >
+              {isMerging ? 'Fusion en cours...' : 'Confirmer la fusion'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
