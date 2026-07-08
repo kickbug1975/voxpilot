@@ -250,9 +250,9 @@ export default function CustomerDetailsClient({
       const loadAllCustomers = async () => {
         try {
           const result = await getCustomers(orgSlug);
-          if (result && Array.isArray(result)) {
+          if (result && result.data && Array.isArray(result.data)) {
             // Filtrer pour exclure le client actuel
-            setAllCustomers(result.filter((c: any) => c.id !== customerId));
+            setAllCustomers(result.data.filter((c: any) => c.id !== customerId));
           }
         } catch (err) {
           console.error("Erreur de chargement des clients :", err);
@@ -283,7 +283,7 @@ export default function CustomerDetailsClient({
   };
 
   const filteredCustomers = allCustomers.filter(c =>
-    c.legal_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (c.trade_name && c.trade_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
     (c.code && c.code.toLowerCase().includes(searchQuery.toLowerCase()))
   );
@@ -2521,7 +2521,7 @@ export default function CustomerDetailsClient({
                 <option value="">-- Choisir le client cible --</option>
                 {filteredCustomers.map((c: any) => (
                   <option key={c.id} value={c.id}>
-                    {c.legal_name} {c.trade_name ? `(${c.trade_name})` : ''} {c.code ? `[${c.code}]` : ''}
+                    {c.name} {c.trade_name ? `(${c.trade_name})` : ''} {c.code ? `[${c.code}]` : ''}
                   </option>
                 ))}
               </select>
