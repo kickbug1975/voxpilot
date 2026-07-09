@@ -77,6 +77,7 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
   if (customer && orgId) {
     try {
       const clientNames = [
+        (customer as any).name,
         (customer as any).legal_name,
         (customer as any).trade_name
       ].filter(Boolean) as string[];
