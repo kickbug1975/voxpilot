@@ -13,6 +13,7 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
 
   const { data: customer, error } = await getCustomerById(orgSlug, id);
 
+  let orgId: string | null = null;
   // Fetch organization members to populate owners dropdown
   let members: { id: string; fullName: string }[] = [];
   try {
@@ -23,6 +24,7 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
       .single();
 
     if (org) {
+      orgId = org.id;
       const { data: memberships } = await supabase
         .from('organization_memberships')
         .select('user_id')
@@ -72,16 +74,31 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
 
   // Fetch orders associated with this customer
   let orders: any[] = [];
-  if (customer) {
+  if (customer && orgId) {
     try {
-      const { data: customerOrders } = await supabase
+      const clientNames = [
+        (customer as any).legal_name,
+        (customer as any).trade_name
+      ].filter(Boolean) as string[];
+
+      const { data: allOrgOrders, error: ordersErr } = await supabase
         .from('orders')
         .select('*, order_items(*)')
-        .or(`client_name.eq."${(customer as any).legal_name}",client_name.eq."${(customer as any).trade_name || ''}"`)
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false });
       
-      if (customerOrders) {
-        orders = customerOrders;
+      if (ordersErr) throw ordersErr;
+
+      if (allOrgOrders) {
+        orders = allOrgOrders.filter(o => {
+          const orderClientNorm = o.client_name.toLowerCase().trim();
+          return clientNames.some(name => {
+            const nameNorm = name.toLowerCase().trim();
+            return orderClientNorm === nameNorm || 
+                   orderClientNorm.includes(nameNorm) || 
+                   nameNorm.includes(orderClientNorm);
+          });
+        });
       }
     } catch (err) {
       console.error('Error loading orders for customer details page:', err);
