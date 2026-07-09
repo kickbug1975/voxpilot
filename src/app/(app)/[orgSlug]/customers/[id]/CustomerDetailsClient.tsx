@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import { updateCustomer, getCustomers } from '@/actions/customers';
 import { mergeCustomersAction } from '@/actions/mergeCustomers';
@@ -73,7 +73,10 @@ import {
   AlertCircle,
   FileText,
   Clock,
-  GitMerge
+  GitMerge,
+  TrendingUp,
+  PieChart,
+  ShoppingBag
 } from 'lucide-react';
 
 interface MarginRule {
@@ -203,6 +206,7 @@ interface CustomerDetailsClientProps {
   error: string | null;
   members: Member[];
   initialTasks: Task[];
+  initialOrders?: any[];
 }
 
 export default function CustomerDetailsClient({
@@ -212,6 +216,7 @@ export default function CustomerDetailsClient({
   error: fetchError,
   members,
   initialTasks = [],
+  initialOrders = [],
 }: CustomerDetailsClientProps) {
   const [customer, setCustomer] = useState<Customer | null>(initialCustomer);
   const [error, setError] = useState<string | null>(fetchError);
@@ -219,6 +224,112 @@ export default function CustomerDetailsClient({
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // --- STATISTIQUES ET OPPORTUNITÉS D'ACHATS ---
+  const stats = useMemo(() => {
+    const orders = initialOrders || [];
+    
+    // 1. Top Produits
+    const productMap = new Map<string, { name: string; totalWeight: number; orderCount: number; lastOrderedAt: string }>();
+    
+    orders.forEach((order: any) => {
+      const items = order.order_items || [];
+      items.forEach((item: any) => {
+        const name = item.product_name || '';
+        const weight = Number(item.quantity_kg) || 0;
+        
+        const existing = productMap.get(name);
+        if (existing) {
+          existing.totalWeight += weight;
+          existing.orderCount += 1;
+          if (new Date(order.created_at) > new Date(existing.lastOrderedAt)) {
+            existing.lastOrderedAt = order.created_at;
+          }
+        } else {
+          productMap.set(name, {
+            name,
+            totalWeight: weight,
+            orderCount: 1,
+            lastOrderedAt: order.created_at,
+          });
+        }
+      });
+    });
+
+    const topProducts = Array.from(productMap.values())
+      .sort((a, b) => b.orderCount - a.orderCount || b.totalWeight - a.totalWeight);
+
+    // 2. Catégories
+    let poissonCount = 0;
+    let crustaceCount = 0;
+    let coquillageCount = 0;
+    let traiteurCount = 0;
+
+    const poissonKeywords = ['cabillaud', 'cabillaut', 'julienne', 'lieu', 'colin', 'églefin', 'eglefin', 'turbot', 'bar', 'sole', 'limande', 'plie', 'carrelet', 'daurade', 'dorade', 'merlan', 'maquereau', 'sardine', 'saumon', 'truite', 'thon', 'espadon'];
+    const crustaceKeywords = ['homard', 'langouste', 'crabe', 'tourteau', 'crevette', 'gambas', 'langoustine', 'araignée'];
+    const coquillageKeywords = ['huître', 'huitre', 'moule', 'coque', 'palourde', 'jacques', 'couteau'];
+    const traiteurKeywords = ['maatjes', 'maatje', 'fumé', 'soupe', 'terrine', 'rillettes', 'salade', 'sauce'];
+
+    topProducts.forEach((p) => {
+      const nameLower = p.name.toLowerCase();
+      if (poissonKeywords.some(kw => nameLower.includes(kw))) poissonCount += p.orderCount;
+      else if (crustaceKeywords.some(kw => nameLower.includes(kw))) crustaceCount += p.orderCount;
+      else if (coquillageKeywords.some(kw => nameLower.includes(kw))) coquillageCount += p.orderCount;
+      else if (traiteurKeywords.some(kw => nameLower.includes(kw))) traiteurCount += p.orderCount;
+      else poissonCount += p.orderCount; // Fallback par défaut
+    });
+
+    const totalCategoryCount = poissonCount + crustaceCount + coquillageCount + traiteurCount || 1;
+
+    // 3. Recommandations IA d'Opportunités
+    const recommendations: { type: 'warning' | 'info'; title: string; description: string }[] = [];
+
+    // Détection de rupture de consommation (sur les Top Produits commandés au moins 2 fois)
+    const now = new Date();
+    topProducts.forEach((p) => {
+      if (p.orderCount >= 2) {
+        const lastDate = new Date(p.lastOrderedAt);
+        const diffDays = Math.ceil((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays > 14) {
+          recommendations.push({
+            type: 'warning',
+            title: `Rupture de consommation : ${p.name}`,
+            description: `Ce produit phare (commandé ${p.orderCount} fois) n'a plus été acheté depuis le ${lastDate.toLocaleDateString('fr-FR')} (il y a ${diffDays} jours). Pensez à lui proposer !`
+          });
+        }
+      }
+    });
+
+    // Détection de cross-selling
+    if (orders.length > 0) {
+      if (crustaceCount === 0) {
+        recommendations.push({
+          type: 'info',
+          title: 'Opportunité : Gamme Crustacés',
+          description: 'Ce client n\'a encore jamais commandé de crustacés (homard, tourteau, crevette). Proposez-lui nos arrivages de saison !'
+        });
+      }
+      if (coquillageCount === 0) {
+        recommendations.push({
+          type: 'info',
+          title: 'Opportunité : Gamme Coquillages',
+          description: 'Aucun coquillage n\'a été acheté récemment. Présentez-lui notre sélection d\'huîtres Ostra Regal ou de moules de bouchot.'
+        });
+      }
+    }
+
+    return {
+      topProducts,
+      categories: {
+        poisson: Math.round((poissonCount / totalCategoryCount) * 100),
+        crustace: Math.round((crustaceCount / totalCategoryCount) * 100),
+        coquillage: Math.round((coquillageCount / totalCategoryCount) * 100),
+        traiteur: Math.round((traiteurCount / totalCategoryCount) * 100),
+      },
+      recommendations,
+      totalOrders: orders.length,
+    };
+  }, [initialOrders]);
 
   // Timeline state
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
@@ -892,6 +1003,9 @@ export default function CustomerDetailsClient({
           </TabsTrigger>
           <TabsTrigger value="tasks" className="rounded-md px-4 py-1.5 text-sm font-medium cursor-pointer">
             Tâches CRM ({tasks.filter(t => t.status !== 'completed' && t.status !== 'cancelled').length})
+          </TabsTrigger>
+          <TabsTrigger value="stats" className="rounded-md px-4 py-1.5 text-sm font-medium cursor-pointer">
+            Analyses & Recommandations ({initialOrders?.length || 0})
           </TabsTrigger>
           <TabsTrigger value="edit" className="rounded-md px-4 py-1.5 text-sm font-medium cursor-pointer">
             Modifier la fiche
@@ -1978,6 +2092,152 @@ export default function CustomerDetailsClient({
               </div>
             </form>
           </div>
+        </TabsContent>
+
+        {/* Tab: Stats & Recommendations */}
+        <TabsContent value="stats" className="space-y-6 outline-none">
+          {stats.totalOrders === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400 font-medium">
+              <ShoppingBag className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+              <p>Aucune commande enregistrée pour ce client pour le moment.</p>
+              <p className="text-xs text-slate-400 mt-1">Les statistiques s'afficheront dès qu'il passera des commandes sur WhatsApp ou via le CRM.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Statistiques d'achats (2/3) */}
+              <div className="lg:col-span-2 space-y-6">
+                
+                {/* Top Produits */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                    Top Produits commandés
+                  </h3>
+                  <div className="overflow-hidden border border-slate-100 rounded-lg">
+                    <Table>
+                      <TableHeader className="bg-slate-50">
+                        <TableRow>
+                          <TableHead className="font-semibold text-slate-900">Produit / Article</TableHead>
+                          <TableHead className="font-semibold text-slate-900 text-center">Commandes</TableHead>
+                          <TableHead className="font-semibold text-slate-900 text-right">Volume Cumulé</TableHead>
+                          <TableHead className="font-semibold text-slate-900 text-right">Dernier achat</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {stats.topProducts.map((p: any, idx: number) => (
+                          <TableRow key={idx} className="hover:bg-slate-50/50 transition-colors">
+                            <TableCell className="font-medium text-slate-900">{p.name}</TableCell>
+                            <TableCell className="text-center text-slate-600 font-semibold">{p.orderCount}</TableCell>
+                            <TableCell className="text-right text-brand-600 font-bold">{p.totalWeight} kg</TableCell>
+                            <TableCell className="text-right text-slate-400 text-xs">
+                              {new Date(p.lastOrderedAt).toLocaleDateString('fr-FR')}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                {/* Répartition par Catégories */}
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-1.5">
+                    <PieChart className="h-4 w-4 text-primary" />
+                    Répartition des achats par catégorie
+                  </h3>
+                  <div className="space-y-4">
+                    {/* Poisson */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-slate-600">
+                        <span>🐟 Poissons</span>
+                        <span>{stats.categories.poisson}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-sky-500 rounded-full" style={{ width: `${stats.categories.poisson}%` }} />
+                      </div>
+                    </div>
+
+                    {/* Crustacés */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-slate-600">
+                        <span>🦀 Crustacés</span>
+                        <span>{stats.categories.crustace}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-rose-500 rounded-full" style={{ width: `${stats.categories.crustace}%` }} />
+                      </div>
+                    </div>
+
+                    {/* Coquillages */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-slate-600">
+                        <span>🦪 Coquillages</span>
+                        <span>{stats.categories.coquillage}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500 rounded-full" style={{ width: `${stats.categories.coquillage}%` }} />
+                      </div>
+                    </div>
+
+                    {/* Traiteur */}
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-semibold text-slate-600">
+                        <span>🍽️ Traiteur / Autre</span>
+                        <span>{stats.categories.traiteur}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${stats.categories.traiteur}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Suggestions IA (1/3) */}
+              <div className="space-y-6">
+                <div className="bg-slate-50/50 border border-slate-200 rounded-xl p-5 shadow-xs">
+                  <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-1.5">
+                    <Sparkles className="h-4 w-4 text-indigo-600 fill-indigo-100" />
+                    Opportunités Commerciales IA
+                  </h3>
+                  
+                  {stats.recommendations.length === 0 ? (
+                    <div className="text-center py-6 text-slate-400 text-xs">
+                      <CheckCircle className="h-8 w-8 mx-auto text-emerald-500 mb-2" />
+                      Aucune recommandation prioritaire.
+                      <p className="mt-1">Le profil d'achat du client est stable et diversifié.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {stats.recommendations.map((rec: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className={`p-4 rounded-lg border text-sm space-y-1.5 shadow-2xs ${
+                            rec.type === 'warning' 
+                              ? 'bg-amber-50/50 border-amber-200 text-amber-900' 
+                              : 'bg-indigo-50/50 border-indigo-200 text-indigo-900'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold">
+                            {rec.type === 'warning' ? (
+                              <AlertCircle className="h-4 w-4 text-amber-600" />
+                            ) : (
+                              <Sparkles className="h-4 w-4 text-indigo-600" />
+                            )}
+                            {rec.title}
+                          </div>
+                          <p className="text-slate-600 text-xs leading-relaxed">{rec.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

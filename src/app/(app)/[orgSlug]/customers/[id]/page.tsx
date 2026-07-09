@@ -70,6 +70,24 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
     console.error('Error loading tasks for customer details page:', err);
   }
 
+  // Fetch orders associated with this customer
+  let orders: any[] = [];
+  if (customer) {
+    try {
+      const { data: customerOrders } = await supabase
+        .from('orders')
+        .select('*, order_items(*)')
+        .or(`client_name.eq."${(customer as any).legal_name}",client_name.eq."${(customer as any).trade_name || ''}"`)
+        .order('created_at', { ascending: false });
+      
+      if (customerOrders) {
+        orders = customerOrders;
+      }
+    } catch (err) {
+      console.error('Error loading orders for customer details page:', err);
+    }
+  }
+
   return (
     <CustomerDetailsClient 
       orgSlug={orgSlug} 
@@ -78,6 +96,7 @@ export default async function CustomerDetailsPage({ params }: CustomerDetailsPag
       error={error || null} 
       members={members}
       initialTasks={tasks}
+      initialOrders={orders}
     />
   );
 }
