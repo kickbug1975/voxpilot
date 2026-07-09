@@ -236,7 +236,22 @@ export default function CustomerDetailsClient({
       const items = order.order_items || [];
       items.forEach((item: any) => {
         const name = item.product_name || '';
-        const weight = Number(item.quantity_kg) || 0;
+        
+        const extractQuantity = (prodName: string): number => {
+          const norm = prodName.toLowerCase().trim();
+          const kgMatch = norm.match(/^(\d+(?:\.\d+)?)\s*kg/);
+          if (kgMatch && kgMatch[1]) return parseFloat(kgMatch[1]);
+          
+          const unitMatch = norm.match(/^(\d+(?:\.\d+)?)\s*(?:pqt|pot|pièces|pièces|piece|pieces|pces|crt|carton|boîte|boite|bte|sashimi|d)/);
+          if (unitMatch && unitMatch[1]) return parseFloat(unitMatch[1]);
+          
+          const numMatch = norm.match(/^(\d+(?:\.\d+)?)/);
+          if (numMatch && numMatch[1]) return parseFloat(numMatch[1]);
+          
+          return 1;
+        };
+
+        const weight = extractQuantity(name);
         
         const existing = productMap.get(name);
         if (existing) {
