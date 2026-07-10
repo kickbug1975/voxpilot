@@ -4,6 +4,7 @@ import React, { useState, useEffect, useTransition, useMemo } from 'react';
 import Link from 'next/link';
 import { updateCustomer, getCustomers } from '@/actions/customers';
 import { mergeCustomersAction } from '@/actions/mergeCustomers';
+import { extractWeightFromArticleName } from '@/utils/caliberHelper';
 import { 
   createLocation, 
   updateLocation, 
@@ -76,7 +77,8 @@ import {
   GitMerge,
   TrendingUp,
   PieChart,
-  ShoppingBag
+  ShoppingBag,
+  Scale
 } from 'lucide-react';
 
 interface MarginRule {
@@ -231,27 +233,18 @@ export default function CustomerDetailsClient({
     
     // 1. Top Produits
     const productMap = new Map<string, { name: string; totalWeight: number; orderCount: number; lastOrderedAt: string }>();
+    let totalRevenue = 0;
+    let totalWeight = 0;
     
     orders.forEach((order: any) => {
       const items = order.order_items || [];
       items.forEach((item: any) => {
         const name = item.product_name || '';
+        const weight = extractWeightFromArticleName(name);
+        const price = item.price_applied ? parseFloat(item.price_applied) : 15.00;
         
-        const extractQuantity = (prodName: string): number => {
-          const norm = prodName.toLowerCase().trim();
-          const kgMatch = norm.match(/^(\d+(?:\.\d+)?)\s*kg/);
-          if (kgMatch && kgMatch[1]) return parseFloat(kgMatch[1]);
-          
-          const unitMatch = norm.match(/^(\d+(?:\.\d+)?)\s*(?:pqt|pot|pièces|pièces|piece|pieces|pces|crt|carton|boîte|boite|bte|sashimi|d)/);
-          if (unitMatch && unitMatch[1]) return parseFloat(unitMatch[1]);
-          
-          const numMatch = norm.match(/^(\d+(?:\.\d+)?)/);
-          if (numMatch && numMatch[1]) return parseFloat(numMatch[1]);
-          
-          return 1;
-        };
-
-        const weight = extractQuantity(name);
+        totalWeight += weight;
+        totalRevenue += weight * price;
         
         const existing = productMap.get(name);
         if (existing) {
@@ -343,6 +336,8 @@ export default function CustomerDetailsClient({
       },
       recommendations,
       totalOrders: orders.length,
+      totalRevenue,
+      totalWeight
     };
   }, [initialOrders]);
 
@@ -2118,7 +2113,41 @@ export default function CustomerDetailsClient({
               <p className="text-xs text-slate-400 mt-1">Les statistiques s'afficheront dès qu'il passera des commandes sur WhatsApp ou via le CRM.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="space-y-6">
+              {/* Cartes de synthèse de Chiffre d'Affaires & Volumes */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center gap-4">
+                  <div className="p-3 bg-emerald-50 rounded-lg text-emerald-600">
+                    <TrendingUp className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500">Chiffre d'Affaires Estimé</p>
+                    <p className="text-2xl font-bold text-slate-900">{stats.totalRevenue.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center gap-4">
+                  <div className="p-3 bg-sky-50 rounded-lg text-sky-600">
+                    <Scale className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500">Volume Total Acheté</p>
+                    <p className="text-2xl font-bold text-slate-900">{stats.totalWeight.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} kg</p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs flex items-center gap-4">
+                  <div className="p-3 bg-indigo-50 rounded-lg text-indigo-600">
+                    <ShoppingBag className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500">Nombre de Commandes</p>
+                    <p className="text-2xl font-bold text-slate-900">{stats.totalOrders}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               {/* Statistiques d'achats (2/3) */}
               <div className="lg:col-span-2 space-y-6">
@@ -2252,6 +2281,7 @@ export default function CustomerDetailsClient({
               </div>
 
             </div>
+          </div>
           )}
         </TabsContent>
       </Tabs>
