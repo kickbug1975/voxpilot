@@ -36,7 +36,6 @@ export function extractWeightFromArticleName(productName: string): number {
   const text = productName.toLowerCase().trim();
 
   // 1. Détection d'un poids brut explicite en kg (ex: "4kg moules", "1.5 kg coques")
-  // Regex capturant un nombre suivi de "kg", "kilo" ou "kilos"
   const kgMatch = text.match(/(\d+(?:[.,]\d+)?)\s*(?:kg|kilo|kilos)(?![a-z])/);
   if (kgMatch) {
     const val = parseFloat(kgMatch[1].replace(',', '.'));
@@ -45,17 +44,31 @@ export function extractWeightFromArticleName(productName: string): number {
     }
   }
 
-  // 2. Détection d'une quantité en pièces (ex: "8 pces sole 2", "2 pqt lolligot")
-  // Regex capturant un nombre suivi de pces, pc, pce, pqt, bts, etc.
-  const pcsMatch = text.match(/(\d+)\s*(?:pces|pc|pce|piece|pieces|pqt|paquet|paquets|cs|carton|cartons|sac|sacs|box|boite|boites|bts|bt)(?![a-z])/);
-  const quantity = pcsMatch ? parseInt(pcsMatch[1], 10) : 1;
+  // 2. Détection de la quantité en pièces
+  let quantity = 1;
+  
+  // A. Si la ligne commence par un nombre (ex: "8 pces sole 2", "3 homard 2", "2 bar")
+  const leadingQtyMatch = text.match(/^\s*(\d+)\b/);
+  if (leadingQtyMatch) {
+    // S'assurer que le nombre de début n'est pas suivi de "kg" (déjà traité à l'étape 1)
+    const isKgNext = text.match(/^\s*\d+\s*(?:kg|kilo|kilos)(?![a-z])/);
+    if (!isKgNext) {
+      quantity = parseInt(leadingQtyMatch[1], 10);
+    }
+  } else {
+    // B. Sinon, chercher un indicateur de pièce n'importe où dans le texte (ex: "sole 2 - 10 pces")
+    const pcsMatch = text.match(/(\d+)\s*(?:pces|pc|pce|piece|pieces|pqt|paquet|paquets|cs|carton|cartons|sac|sacs|box|boite|boites|bts|bt)(?![a-z])/);
+    if (pcsMatch) {
+      quantity = parseInt(pcsMatch[1], 10);
+    }
+  }
 
   // 3. Détection du calibre (Soles, Homards)
   let unitWeight = 1.0; // Poids par défaut si pas de calibre
   let hasCaliber = false;
 
-  // Recherche de "sole X"
-  const soleMatch = text.match(/sole\s*(\d)/);
+  // Recherche de "sole" suivi plus loin d'un chiffre de calibre de 1 à 7
+  const soleMatch = text.match(/sole\b.*?([1-7])\b/);
   if (soleMatch) {
     const caliber = soleMatch[1];
     if (CALIBERS_WEIGHTS.sole[caliber]) {
@@ -64,9 +77,9 @@ export function extractWeightFromArticleName(productName: string): number {
     }
   }
 
-  // Recherche de "homard X"
+  // Recherche de "homard" suivi plus loin d'un chiffre de calibre de 1 à 4
   if (!hasCaliber) {
-    const homardMatch = text.match(/homard\s*(\d)/);
+    const homardMatch = text.match(/homard\b.*?([1-4])\b/);
     if (homardMatch) {
       const caliber = homardMatch[1];
       if (CALIBERS_WEIGHTS.homard[caliber]) {
@@ -77,21 +90,5 @@ export function extractWeightFromArticleName(productName: string): number {
   }
 
   // 4. Calcul du poids final
-  // Si on a trouvé des pièces et un calibre (ex: 8 pces sole 2 -> 8 * 0.45 = 3.6kg)
-  // Si on a un calibre sans pièces spécifiées (ex: "sole 2" -> 1 * 0.45 = 0.45kg)
-  // Si on a des pièces sans calibre (ex: "10 turbot" ou "10 pces turbot" -> 10 * 1.0 = 10.0kg)
-  if (hasCaliber) {
-    return quantity * unitWeight;
-  }
-
-  // Cas particulier : détection d'un nombre brut en début de ligne (ex: "2 bar de ligne")
-  const leadingNumMatch = text.match(/^\s*(\d+)(?!\s*(?:kg|kilo|kilos|pces|pc|pce|piece|pieces|pqt|paquet|paquets|cs|carton|cartons|sac|sacs|box|boite|boites|bts|bt))/);
-  if (leadingNumMatch && !pcsMatch) {
-    const leadingQty = parseInt(leadingNumMatch[1], 10);
-    if (leadingQty > 0) {
-      return leadingQty * unitWeight;
-    }
-  }
-
   return quantity * unitWeight;
 }
