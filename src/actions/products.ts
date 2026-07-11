@@ -286,3 +286,32 @@ export async function unlinkSupplierFromProduct(orgSlug: string, productId: stri
     return { error: message };
   }
 }
+
+export async function updateProductAvailability(
+  orgSlug: string,
+  id: string,
+  fields: { is_available?: boolean; in_stock_ghlin?: boolean }
+) {
+  try {
+    const supabase = await createClient();
+    const orgId = await getOrgId(supabase, orgSlug);
+
+    const { data, error } = await supabase
+      .from('products')
+      .update(fields)
+      .eq('organization_id', orgId)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath(`/${orgSlug}/stock`);
+    revalidatePath(`/${orgSlug}/products`);
+    return { success: true, data };
+  } catch (err) {
+    console.error('Error updating product availability:', err);
+    const message = err instanceof Error ? err.message : 'Impossible de modifier la disponibilité du produit.';
+    return { error: message };
+  }
+}

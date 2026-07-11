@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   Calendar,
   CheckSquare,
-  ShoppingCart
+  ShoppingCart,
+  Warehouse
 } from 'lucide-react';
 import OrgSwitcher from '@/components/OrgSwitcher';
 import UserProfileDropdown from '@/components/UserProfileDropdown';
@@ -103,6 +104,7 @@ export default async function AppLayout({ children, params }: AppLayoutProps) {
     { name: 'Agenda', href: `/${orgSlug}/agenda`, icon: Calendar },
     { name: 'Tâches CRM', href: `/${orgSlug}/tasks`, icon: CheckSquare },
     { name: 'Produits', href: `/${orgSlug}/products`, icon: Package },
+    { name: 'Stock magasin', href: `/${orgSlug}/stock`, icon: Warehouse },
     { name: 'Clients', href: `/${orgSlug}/customers`, icon: Users },
     { name: 'Fournisseurs', href: `/${orgSlug}/suppliers`, icon: Truck },
     { name: 'Tarifs & Imports', href: `/${orgSlug}/imports`, icon: Upload },
