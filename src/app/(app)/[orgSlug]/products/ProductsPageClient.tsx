@@ -2,7 +2,7 @@
 
 import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { createProduct, deleteProduct } from '@/actions/products';
+import { createProduct, deleteProduct, bulkUpdateYieldRate } from '@/actions/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,12 +53,64 @@ export default function ProductsPageClient({
   const [error, setError] = useState<string | null>(fetchError);
   const [isPending, startTransition] = useTransition();
 
-  // Filter products based on search
+  // États pour la sélection multiple et l'édition en masse
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [yieldValue, setYieldValue] = useState<string>('1.0');
+
+  // Filtrer les produits basés sur la recherche
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(search.toLowerCase()) || 
     p.internal_sku.toLowerCase().includes(search.toLowerCase()) ||
     (p.barcode && p.barcode.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(filteredProducts.map(p => p.id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds(prev => [...prev, id]);
+    } else {
+      setSelectedIds(prev => prev.filter(x => x !== id));
+    }
+  };
+
+  const handleBulkUpdate = () => {
+    const parsedYield = parseFloat(yieldValue);
+    if (isNaN(parsedYield) || parsedYield < 0 || parsedYield > 1) {
+      alert('Veuillez saisir un rendement valide entre 0 et 1.');
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const res = await bulkUpdateYieldRate(orgSlug, selectedIds, parsedYield);
+        if (res.error) {
+          throw new Error(res.error);
+        }
+        
+        // Mettre à jour localement
+        setProducts(prev => 
+          prev.map(p => 
+            selectedIds.includes(p.id) 
+              ? { ...p, default_yield_rate: String(parsedYield) } 
+              : p
+          )
+        );
+        setSelectedIds([]);
+        setIsBulkOpen(false);
+      } catch (err: any) {
+        alert(err.message || 'Impossible de modifier les rendements.');
+      }
+    });
+  };
+
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -214,6 +266,14 @@ export default function ProductsPageClient({
           <Table>
             <TableHeader className="bg-slate-50">
               <TableRow>
+                <TableHead className="w-10 px-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                  />
+                </TableHead>
                 <TableHead className="font-semibold text-slate-700 w-1/3">Nom du produit</TableHead>
                 <TableHead className="font-semibold text-slate-700">SKU Interne</TableHead>
                 <TableHead className="font-semibold text-slate-700">Code EAN</TableHead>
@@ -224,7 +284,20 @@ export default function ProductsPageClient({
             </TableHeader>
             <TableBody>
               {filteredProducts.map((product) => (
-                <TableRow key={product.id} className="hover:bg-slate-50/50">
+                <TableRow 
+                  key={product.id} 
+                  className={`hover:bg-slate-50/50 transition-colors ${
+                    selectedIds.includes(product.id) ? 'bg-indigo-50/20' : ''
+                  }`}
+                >
+                  <TableCell className="px-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(product.id)}
+                      onChange={(e) => handleSelectOne(product.id, e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium text-slate-900">
                     <div className="flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${product.is_active ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -266,6 +339,139 @@ export default function ProductsPageClient({
           </Table>
         )}
       </div>
+
+      {/* 🛒 BARRE D'ACTIONS GROUPÉES FLOTTANTE */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center gap-2">
+            <span className="h-5 w-5 bg-indigo-600 text-[11px] font-bold rounded-full flex items-center justify-center">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-semibold text-slate-200">sélectionnés</span>
+          </div>
+          
+          <div className="h-4 w-px bg-slate-800" />
+          
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setSelectedIds([])}
+              className="text-slate-400 hover:text-white hover:bg-slate-800 text-xs py-1 h-8"
+            >
+              Annuler
+            </Button>
+            <Button 
+              size="sm"
+              onClick={() => {
+                setYieldValue('1.0');
+                setIsBulkOpen(true);
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-1 h-8"
+            >
+              Modifier rendement
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 🎛️ MODAL D'ÉDITION DE RENDEMENT EN MASSE */}
+      <Dialog open={isBulkOpen} onOpenChange={setIsBulkOpen}>
+        <DialogContent className="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900">
+              Rendement de la sélection ({selectedIds.length} produits)
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Choisissez une coupe prédéfinie ou saisissez un taux de rendement matière personnalisé pour les articles sélectionnés.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Presets de coupe */}
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setYieldValue('1.0')}
+                className={`border rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 transition text-center cursor-pointer ${
+                  yieldValue === '1.0'
+                    ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-slate-50/50'
+                }`}
+              >
+                <span className="text-lg">🐟</span>
+                <span className="text-[11px] uppercase tracking-wider font-extrabold">Entier</span>
+                <span className="text-[10px] text-slate-400">100%</span>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setYieldValue('0.5')}
+                className={`border rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 transition text-center cursor-pointer ${
+                  yieldValue === '0.5'
+                    ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-slate-50/50'
+                }`}
+              >
+                <span className="text-lg">🔪</span>
+                <span className="text-[11px] uppercase tracking-wider font-extrabold">Filet</span>
+                <span className="text-[10px] text-slate-400">50%</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setYieldValue('0.4')}
+                className={`border rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 transition text-center cursor-pointer ${
+                  yieldValue === '0.4'
+                    ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold'
+                    : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-slate-50/50'
+                }`}
+              >
+                <span className="text-lg">🥩</span>
+                <span className="text-[11px] uppercase tracking-wider font-extrabold">Dos</span>
+                <span className="text-[10px] text-slate-400">40%</span>
+              </button>
+            </div>
+
+            <div className="h-px bg-slate-100" />
+
+            {/* Saisie personnalisée */}
+            <div className="grid gap-1">
+              <Label htmlFor="bulk_yield_rate" className="text-xs font-semibold text-slate-700">
+                Rendement personnalisé (de 0 à 1)
+              </Label>
+              <Input 
+                id="bulk_yield_rate"
+                type="number"
+                step="0.001"
+                min="0"
+                max="1"
+                value={yieldValue}
+                onChange={(e) => setYieldValue(e.target.value)}
+                className="border-slate-200 font-mono text-sm"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => setIsBulkOpen(false)}
+              className="border-slate-200"
+            >
+              Annuler
+            </Button>
+            <Button 
+              onClick={handleBulkUpdate}
+              disabled={isPending} 
+              className="bg-primary text-white hover:bg-primary/90"
+            >
+              {isPending ? 'Mise à jour...' : 'Appliquer aux produits'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

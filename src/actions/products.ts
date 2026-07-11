@@ -315,3 +315,47 @@ export async function updateProductAvailability(
     return { error: message };
   }
 }
+
+export async function bulkUpdateYieldRate(orgSlug: string, productIds: string[], yieldRate: number) {
+  try {
+    const supabase = await createClient();
+    const orgId = await getOrgId(supabase, orgSlug);
+
+    if (!productIds || productIds.length === 0) {
+      throw new Error('Aucun produit sélectionné.');
+    }
+
+    const { data, error } = await supabase
+      .from('products')
+      .update({ default_yield_rate: yieldRate })
+      .eq('organization_id', orgId)
+      .in('id', productIds);
+
+    if (error) throw error;
+
+    // Loguer l'audit
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      await logAuditEvent(
+        orgId,
+        user?.id || null,
+        'BULK_UPDATE_YIELD_RATE',
+        'products',
+        null,
+        { product_ids: productIds, default_yield_rate: yieldRate }
+      );
+    } catch (auditErr) {
+      console.error('Error logging audit event:', auditErr);
+    }
+
+    revalidatePath(`/${orgSlug}/products`);
+    revalidatePath(`/${orgSlug}/stock`);
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error bulk updating yield rates:', err);
+    const message = err instanceof Error ? err.message : 'Impossible de modifier les rendements en masse.';
+    return { error: message };
+  }
+}
+
