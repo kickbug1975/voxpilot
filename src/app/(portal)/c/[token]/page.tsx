@@ -40,7 +40,7 @@ export default async function PortalPage({ params }: PortalPageProps) {
   const [customerResult, orgResult] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, name, trade_name, price_group')
+      .select('id, legal_name, trade_name, price_group')
       .eq('id', tokenData.customer_id)
       .single(),
     supabase
@@ -59,11 +59,18 @@ export default async function PortalPage({ params }: PortalPageProps) {
     );
   }
 
-  const customer = customerResult.data;
+  const customerData = customerResult.data;
   const organization = orgResult.data;
 
+  // Formater pour le composant PortalClient
+  const customer = {
+    id: customerData.id,
+    name: customerData.legal_name,
+    trade_name: customerData.trade_name
+  };
+
   // 3. Récupérer la Mercuriale personnalisée (historique des produits commandés)
-  const clientNames = [customer.name, customer.trade_name].filter(Boolean) as string[];
+  const clientNames = [customerData.legal_name, customerData.trade_name].filter(Boolean) as string[];
   
   const { data: pastOrders } = await supabase
     .from('orders')
