@@ -1,5 +1,6 @@
 'use server';
 
+import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { SupabaseClient } from '@supabase/supabase-js';
@@ -240,6 +241,39 @@ export async function getCustomerById(orgSlug: string, id: string) {
   }
 }
 
+const customerFormSchema = z.object({
+  name: z.string().trim().optional(),
+  tradeName: z.string().trim().optional(),
+  code: z.string().trim().max(50, "Le code client ne doit pas dépasser 50 caractères").optional(),
+  vatNumber: z.string().trim().max(30, "Le numéro de TVA ne doit pas dépasser 30 caractères").optional(),
+  segment: z.string().trim().optional().default('retail'),
+  email: z.union([z.string().email("L'adresse e-mail est invalide"), z.literal("")]).optional(),
+  phone: z.string().trim().max(30).optional(),
+  paymentTerms: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
+  internalNotes: z.string().trim().optional(),
+  lifecycleStatus: z.enum(['prospect', 'qualified', 'customer', 'dormant', 'lost', 'blocked']).optional().default('prospect'),
+  potentialLevel: z.enum(['unknown', 'low', 'medium', 'high', 'strategic']).optional().default('unknown'),
+  ownerUserId: z.string().uuid().optional(),
+  // Location
+  line1: z.string().trim().optional(),
+  line2: z.string().trim().optional(),
+  postalCode: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  region: z.string().trim().optional(),
+  countryCode: z.string().trim().max(2).optional().default('BE'),
+  // Contact
+  contactFirstName: z.string().trim().optional(),
+  contactLastName: z.string().trim().optional(),
+  contactEmail: z.union([z.string().email("L'e-mail du contact est invalide"), z.literal("")]).optional(),
+  contactPhone: z.string().trim().optional(),
+  contactMobile: z.string().trim().optional(),
+  contactJobTitle: z.string().trim().optional(),
+}).refine(data => data.name || data.tradeName, {
+  message: "Le nom légal ou le nom commercial est requis.",
+  path: ['name']
+});
+
 export async function createCustomer(orgSlug: string, formData: FormData) {
   try {
     const supabase = await createClient();
@@ -249,51 +283,62 @@ export async function createCustomer(orgSlug: string, formData: FormData) {
     const actorUserId = userData?.user?.id;
     if (!actorUserId) throw new Error('Utilisateur non connecté.');
 
-    let name = formData.get('name') as string;
-    const tradeName = formData.get('tradeName') as string;
-    const code = formData.get('code') as string;
-    const vatNumber = formData.get('vatNumber') as string;
-    const segment = formData.get('segment') as string || 'retail';
-    const email = formData.get('email') as string;
-    const phone = formData.get('phone') as string;
-    const paymentTerms = formData.get('paymentTerms') as string;
-    const notes = formData.get('notes') as string;
-    const internalNotes = formData.get('internalNotes') as string;
-    const lifecycleStatus = formData.get('lifecycleStatus') as any || 'prospect';
-    const potentialLevel = formData.get('potentialLevel') as any || 'unknown';
-    const ownerUserId = formData.get('ownerUserId') as string || actorUserId;
+    // Extraction et validation avec Zod
+    const rawData: Record<string, any> = {};
+    formData.forEach((value, key) => {
+      rawData[key] = value;
+    });
+
+    const parseResult = customerFormSchema.safeParse(rawData);
+    if (!parseResult.success) {
+      const errMsgs = parseResult.error.issues.map((e: z.ZodIssue) => e.message).join(', ');
+      throw new Error(`Données de formulaire invalides : ${errMsgs}`);
+    }
+
+    const validated = parseResult.data;
+    let name = validated.name;
+    const tradeName = validated.tradeName;
+    const code = validated.code;
+    const vatNumber = validated.vatNumber;
+    const segment = validated.segment;
+    const email = validated.email || null;
+    const phone = validated.phone || null;
+    const paymentTerms = validated.paymentTerms || null;
+    const notes = validated.notes || null;
+    const internalNotes = validated.internalNotes || null;
+    const lifecycleStatus = validated.lifecycleStatus;
+    const potentialLevel = validated.potentialLevel;
+    const ownerUserId = validated.ownerUserId ?? actorUserId;
 
     // Location fields
-    const line1 = formData.get('line1') as string;
-    const line2 = formData.get('line2') as string;
-    const postalCode = formData.get('postalCode') as string;
-    const city = formData.get('city') as string;
-    const region = formData.get('region') as string;
-    const countryCode = formData.get('countryCode') as string || 'BE';
+    const line1 = validated.line1;
+    const line2 = validated.line2;
+    const postalCode = validated.postalCode;
+    const city = validated.city;
+    const region = validated.region;
+    const countryCode = validated.countryCode;
 
     // Contact fields
-    const contactFirstName = formData.get('contactFirstName') as string;
-    const contactLastName = formData.get('contactLastName') as string;
-    const contactEmail = formData.get('contactEmail') as string;
-    const contactPhone = formData.get('contactPhone') as string;
-    const contactMobile = formData.get('contactMobile') as string;
-    const contactJobTitle = formData.get('contactJobTitle') as string;
+    const contactFirstName = validated.contactFirstName;
+    const contactLastName = validated.contactLastName;
+    const contactEmail = validated.contactEmail || null;
+    const contactPhone = validated.contactPhone || null;
+    const contactMobile = validated.contactMobile || null;
+    const contactJobTitle = validated.contactJobTitle || null;
 
     if (!name && !tradeName) {
       throw new Error('Le nom légal ou le nom commercial de l\'entreprise est obligatoire.');
     }
 
-    if (!name) {
-      name = tradeName;
-    }
+    const legalName = name || tradeName || '';
 
     const data = await CustomerCrmService.createCustomer(supabase, {
       organizationId: orgId,
-      legalName: name,
-      tradeName,
-      code,
-      vatNumber,
-      segment,
+      legalName: legalName,
+      tradeName: tradeName || undefined,
+      code: code || undefined,
+      vatNumber: vatNumber || undefined,
+      segment: segment || undefined,
       primaryEmail: email,
       phone,
       paymentTerms,
