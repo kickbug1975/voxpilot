@@ -34,3 +34,21 @@ Implémenté en juillet 2026 pour fournir des graphiques et synthèses financiè
 - **Validation applicative Zod** : L'action de création de client (`createCustomer` dans `src/actions/customers.ts`) valide et nettoie l'intégralité des entrées du formulaire (format e-mail, téléphone, longueurs maximales de code, enums de cycle de vie et potentiels autorisés) avant d'exécuter des écritures.
 - **Exclusion de Secrets** : Aucun jeton, clé secrète Supabase ou mot de passe n'est suivi par Git (les fichiers `.env*` sont exclus par `.gitignore` et gérés par variables d'environnement sur le VPS).
 - **Déploiement Coolify** : Des scripts d'ingestion et de push automatisés (`deploy-coolify.ts` et `deploy-whatsapp-backend.ts`) s'interfacent avec l'API Coolify sur le port `8000` du VPS pour propager les configurations de variables d'environnement et relancer instantanément les builds des conteneurs de production lors des mises à jour.
+
+---
+
+## 5. Gestion des Disponibilités (Stock) & Portail Client B2B
+- **Modèle de données** :
+  - `is_available` (booléen, défaut `true`) : Disponibilité générale d'un produit au catalogue.
+  - `in_stock_ghlin` (booléen, défaut `false`) : Stock magasin présent physiquement à Ghlin pour le dépannage rapide de dernière minute.
+- **Portail Client B2B (`/c/[token]`)** :
+  - Route épurée et sécurisée par jeton unique temporaire (`client_portal_tokens`).
+  - Affiche en priorité la **Mercuriale habituelle** du client (articles achetés dans les 30 derniers jours triés par fréquence décroissante).
+  - Permet la planification de livraison, bloquant les dimanches et lundis (jours de fermeture).
+- **Algorithme de Cut-off (14h30)** :
+  - Si la livraison est demandée pour le lendemain ET qu'il est plus de 14h30 (Heure de Bruxelles) : seuls les articles disponibles en stock magasin (`in_stock_ghlin = true`) peuvent être commandés. Les autres articles passent en statut rupture.
+- **Automatisation WhatsApp** :
+  * Si un client envoie un message privé réclamant son lien (mots-clés : *"lien"*, *"portail"*, *"me connecter"*, etc.), le service génère automatiquement un token de 24h et lui transmet instantanément par WhatsApp.
+- **Tâche Cron** :
+  * La route `/api/cron/reset-ghlin-stock` réinitialise tous les matins à 08h00 la colonne `in_stock_ghlin` à `false` pour tout le catalogue.
+
