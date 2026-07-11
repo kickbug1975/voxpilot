@@ -383,62 +383,15 @@ export default function ProductsPageClient({
               Rendement de la sélection ({selectedIds.length} produits)
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Choisissez une coupe prédéfinie ou saisissez un taux de rendement matière personnalisé pour les articles sélectionnés.
+              Saisissez le taux de rendement matière par défaut (entre 0 et 1) à appliquer pour les articles sélectionnés.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Presets de coupe */}
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setYieldValue('1.0')}
-                className={`border rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 transition text-center cursor-pointer ${
-                  yieldValue === '1.0'
-                    ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold'
-                    : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-slate-50/50'
-                }`}
-              >
-                <span className="text-lg">🐟</span>
-                <span className="text-[11px] uppercase tracking-wider font-extrabold">Entier</span>
-                <span className="text-[10px] text-slate-400">100%</span>
-              </button>
-              
-              <button
-                type="button"
-                onClick={() => setYieldValue('0.5')}
-                className={`border rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 transition text-center cursor-pointer ${
-                  yieldValue === '0.5'
-                    ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold'
-                    : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-slate-50/50'
-                }`}
-              >
-                <span className="text-lg">🔪</span>
-                <span className="text-[11px] uppercase tracking-wider font-extrabold">Filet</span>
-                <span className="text-[10px] text-slate-400">50%</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setYieldValue('0.4')}
-                className={`border rounded-xl p-3 flex flex-col items-center justify-center gap-1.5 transition text-center cursor-pointer ${
-                  yieldValue === '0.4'
-                    ? 'border-indigo-600 bg-indigo-50/50 text-indigo-700 font-bold'
-                    : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-slate-50/50'
-                }`}
-              >
-                <span className="text-lg">🥩</span>
-                <span className="text-[11px] uppercase tracking-wider font-extrabold">Dos</span>
-                <span className="text-[10px] text-slate-400">40%</span>
-              </button>
-            </div>
-
-            <div className="h-px bg-slate-100" />
-
             {/* Saisie personnalisée */}
             <div className="grid gap-1">
               <Label htmlFor="bulk_yield_rate" className="text-xs font-semibold text-slate-700">
-                Rendement personnalisé (de 0 à 1)
+                Taux de rendement matière (ex: 1 pour entier, 0.5 pour filet, 0.4 pour dos)
               </Label>
               <Input 
                 id="bulk_yield_rate"
@@ -448,8 +401,12 @@ export default function ProductsPageClient({
                 max="1"
                 value={yieldValue}
                 onChange={(e) => setYieldValue(e.target.value)}
+                placeholder="ex: 0.52"
                 className="border-slate-200 font-mono text-sm"
               />
+              <p className="text-[10px] text-slate-400">
+                ex: 0.500 pour appliquer 50% de rendement (50% de perte au parage).
+              </p>
             </div>
           </div>
 
