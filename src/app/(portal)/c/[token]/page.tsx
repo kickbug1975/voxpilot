@@ -40,7 +40,7 @@ export default async function PortalPage({ params }: PortalPageProps) {
   const [customerResult, orgResult] = await Promise.all([
     supabase
       .from('customers')
-      .select('id, legal_name, trade_name, price_group')
+      .select('id, legal_name, trade_name')
       .eq('id', tokenData.customer_id)
       .single(),
     supabase
