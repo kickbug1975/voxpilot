@@ -1,5 +1,5 @@
 ---
-stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 inputDocuments:
   - "BlueMargin_PRD_CRM_Lite_V1.1.md"
   - "BlueMargin_PRD_MVP.md"
@@ -8,10 +8,10 @@ inputDocuments:
 workflowType: 'architecture'
 project_name: 'BlueMargin'
 user_name: 'Dimitri'
-date: '2026-07-11T15:35:00+02:00'
-lastStep: 9
+date: '2026-07-11T17:50:00+02:00'
+lastStep: 10
 status: 'complete'
-completedAt: '2026-07-11T15:40:00+02:00'
+completedAt: '2026-07-11T17:55:00+02:00'
 ---
 
 # Architecture Decision Document
@@ -182,13 +182,37 @@ L'équipe de Ghlin dispose d'un écran dédié au sein du CRM :
 
 ---
 
+## 10. Interface d'Édition en Masse (Bulk Update) des Produits dans le CRM
+
+### A. Spécifications du Besoin
+Pour éviter la pénibilité de la mise à jour article par article (ex: ajuster le rendement moyen de dizaines de poissons entiers du fournisseur Vanhauwaert), le CRM intègre une mécanique de sélection et d'édition groupée dans son catalogue d'administration.
+
+### B. Architecture Technique
+1. **Composant UI (Tableau des produits CRM)** :
+   * Intégration d'un état local de sélection `selectedProductIds` sous forme de tableau de clés UUIDs.
+   * Ajout de cases à cocher (Checkboxes) sur chaque ligne du tableau, ainsi qu'une checkbox globale d'en-tête (pour cocher tout le tableau ou toute la page).
+2. **Barre d'Actions Flottante (Sticky Action Bar)** :
+   * S'affiche dynamiquement en bas d'écran lorsque `selectedProductIds.length > 0`.
+   * Propose plusieurs actions globales, notamment : **« Modifier le rendement »**, **« Activer/Désactiver »**, **« Assigner un fournisseur »**.
+3. **Action Serveur Next.js de Mise à jour Groupée (`products.ts`)** :
+   * Une action `bulkUpdateProducts(productIds: string[], updates: Partial<Product>)` reçoit le tableau d'UUIDs et les champs à modifier.
+   * Elle effectue une requête SQL de masse optimisée :
+     ```typescript
+     await supabase.from('products').update(updates).in('id', productIds)
+     ```
+   * Applique les règles de contrôle d'accès : vérifie que l'utilisateur est `admin`, `owner` ou `manager` de l'organisation.
+   * Déclenche une revalidation de route via `revalidatePath` pour actualiser instantanément l'interface utilisateur.
+
+---
+
 ### Architecture Completeness Checklist
 
 - [x] Analyse du contexte du projet effectuée
 - [x] Décisions architecturales figées avec cascade de tarification
 - [x] Rapprochement sémantique et autonomie de l'IA spécifiés
 - [x] Structure de dossiers et fichiers cible cartographiée
-- [x] Règles de non-régression (lessons learned) rédigées
+- [x] Intégration du portail client et des règles de stock avec cut-off
+- [x] Spécifications techniques pour l'interface de mise à jour groupée (Bulk)
 
 ### Architecture Readiness Assessment
 
