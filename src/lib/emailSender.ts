@@ -13,10 +13,125 @@ interface SendEmailParams {
   customMessageId?: string; // Optional custom message ID for console simulation/testing
 }
 
+async function refreshMicrosoftTokens(userId: string, refreshToken: string) {
+  const admin = createAdminClient();
+  const clientId = env.MICROSOFT_CLIENT_ID;
+  const tenantId = env.MICROSOFT_TENANT_ID || 'common';
+  const clientSecret = env.MICROSOFT_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error('Configuration Microsoft OAuth manquante (Client ID ou Client Secret dans .env)');
+  }
+
+  const response = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Échec du rafraîchissement du jeton Microsoft : ${text}`);
+  }
+
+  const data = await response.json();
+  const { access_token, refresh_token: newRefreshToken, expires_in } = data;
+  
+  const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
+
+  const updateData: any = {
+    access_token,
+    expires_at: expiresAt,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (newRefreshToken) {
+    updateData.refresh_token = newRefreshToken;
+  }
+
+  await admin
+    .from('user_microsoft_tokens')
+    .update(updateData)
+    .eq('user_id', userId);
+
+  return access_token;
+}
+
 export async function sendEmail({ userId, organizationId, to, subject, html, quoteId, customMessageId }: SendEmailParams) {
   const admin = createAdminClient();
 
   try {
+    // 0. Fetch user's Microsoft OAuth tokens
+    const { data: msToken } = await admin
+      .from('user_microsoft_tokens')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (msToken) {
+      console.log(`[EMAIL] Envoi de l'e-mail via Microsoft Graph pour l'utilisateur ${userId} (${msToken.email})`);
+      let accessToken = msToken.access_token;
+      const isExpired = new Date(msToken.expires_at).getTime() < Date.now() + 60 * 1000; // Expired or expiring within 60s
+
+      if (isExpired) {
+        console.log(`[EMAIL] Jeton Microsoft expiré, rafraîchissement...`);
+        accessToken = await refreshMicrosoftTokens(userId, msToken.refresh_token);
+      }
+
+      // Format Microsoft Graph API payload
+      const recipients = to.map(email => ({
+        emailAddress: { address: email.trim() }
+      }));
+
+      const payload = {
+        message: {
+          subject: subject,
+          body: {
+            contentType: 'HTML',
+            content: html
+          },
+          toRecipients: recipients
+        },
+        saveToSentItems: 'true'
+      };
+
+      const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Microsoft Graph API a renvoyé l'erreur : ${errText}`);
+      }
+
+      // Insert message record
+      await admin.from('email_messages').insert({
+        organization_id: organizationId,
+        quote_id: quoteId || null,
+        to_emails: to,
+        subject: subject,
+        status: 'sent',
+        provider: 'microsoft',
+        provider_message_id: 'ms_' + Math.random().toString(36).substring(7),
+        sent_by: userId,
+        sent_at: new Date().toISOString()
+      });
+
+      return { success: true, provider: 'microsoft' };
+    }
+
     // 1. Fetch user's SMTP config
     const { data: smtpConfig } = await admin
       .from('user_email_configs')
@@ -143,8 +258,14 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
       console.error('[EMAIL] Erreur lors de l\'enregistrement de l\'échec en base :', dbErr);
     }
 
+    // Renvoyer un message d'erreur sécurisé et convivial à l'utilisateur
+    let friendlyMessage = "Une erreur est survenue lors de l'envoi de l'e-mail via votre serveur SMTP.";
+    if (err instanceof Error && err.message.includes('Authentication unsuccessful')) {
+      friendlyMessage = "Échec d'authentification avec votre serveur SMTP. Si vous utilisez Outlook, assurez-vous d'utiliser un Mot de passe d'application valide.";
+    }
+
     return { 
-      error: err instanceof Error ? err.message : "Une erreur inconnue est survenue lors de l'envoi." 
+      error: friendlyMessage
     };
   }
 }

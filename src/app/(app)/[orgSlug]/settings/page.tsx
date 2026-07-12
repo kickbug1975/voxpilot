@@ -120,6 +120,13 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   // 9. Fetch current user SMTP configuration
   const { data: smtpConfig } = await getUserSmtpConfig();
 
+  // 10. Fetch current user Microsoft OAuth configuration
+  const { data: msToken } = await supabase
+    .from('user_microsoft_tokens')
+    .select('email')
+    .eq('user_id', user.id)
+    .single();
+
   return (
     <SettingsClient
       orgSlug={orgSlug}
@@ -131,6 +138,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
       isDevOrLog={isDevOrLog}
       initialCategories={categories || []}
       initialSmtpConfig={smtpConfig || null}
+      initialMicrosoftEmail={msToken?.email || null}
     />
   );
 }

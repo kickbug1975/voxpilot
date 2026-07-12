@@ -8,6 +8,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 import { encrypt, decrypt } from '@/lib/encryption';
 import { sendEmail } from '@/lib/emailSender';
+import { z } from 'zod';
 
 // Helper to get organization ID and verify membership
 async function getOrgId(supabase: SupabaseClient, orgSlug: string): Promise<string> {
@@ -910,6 +911,14 @@ export async function getUserSmtpConfig() {
   }
 }
 
+const smtpConfigSchema = z.object({
+  smtpHost: z.string().trim().min(1, "Le serveur SMTP est requis"),
+  smtpPort: z.number().int().min(1).max(65535, "Le port SMTP doit être compris entre 1 et 65535"),
+  smtpUser: z.string().trim().email("L'adresse e-mail doit être valide"),
+  smtpPass: z.string().min(1, "Le mot de passe de messagerie est requis"),
+  senderName: z.string().trim().min(1, "Le nom de l'expéditeur est requis")
+});
+
 export async function saveUserSmtpConfig(formData: FormData) {
   try {
     const supabase = await createClient();
@@ -922,26 +931,33 @@ export async function saveUserSmtpConfig(formData: FormData) {
     const smtpPass = formData.get('smtpPass') as string;
     const senderName = formData.get('senderName') as string;
 
-    if (!smtpHost || !smtpPortRaw || !smtpUser || !smtpPass || !senderName) {
-      throw new Error('Tous les champs de configuration SMTP sont obligatoires.');
-    }
-
     const smtpPort = parseInt(smtpPortRaw, 10);
-    if (isNaN(smtpPort)) {
-      throw new Error('Le port SMTP doit être un nombre.');
+
+    const validation = smtpConfigSchema.safeParse({
+      smtpHost,
+      smtpPort: isNaN(smtpPort) ? undefined : smtpPort,
+      smtpUser,
+      smtpPass,
+      senderName
+    });
+
+    if (!validation.success) {
+      const errorMsg = validation.error.issues.map(issue => issue.message).join(', ');
+      throw new Error(`Données de configuration SMTP invalides : ${errorMsg}`);
     }
 
-    const encryptedPassword = encrypt(smtpPass);
+    const validated = validation.data;
+    const encryptedPassword = encrypt(validated.smtpPass);
 
     const { error } = await supabase
       .from('user_email_configs')
       .upsert({
         user_id: user.id,
-        smtp_host: smtpHost,
-        smtp_port: smtpPort,
-        smtp_user: smtpUser,
+        smtp_host: validated.smtpHost,
+        smtp_port: validated.smtpPort,
+        smtp_user: validated.smtpUser,
         smtp_pass: encryptedPassword,
-        sender_name: senderName,
+        sender_name: validated.senderName,
         updated_at: new Date().toISOString()
       });
 
@@ -951,6 +967,29 @@ export async function saveUserSmtpConfig(formData: FormData) {
   } catch (err) {
     console.error('Error saving user SMTP config:', err);
     return { error: err instanceof Error ? err.message : 'Impossible d\'enregistrer la configuration SMTP.' };
+  }
+}
+
+export async function disconnectMicrosoftAccount() {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('Utilisateur non connecté.');
+    }
+
+    const { error } = await supabase
+      .from('user_microsoft_tokens')
+      .delete()
+      .eq('user_id', user.id);
+
+    if (error) throw error;
+
+    return { success: true };
+  } catch (err) {
+    console.error('Error disconnecting Microsoft account:', err);
+    return { error: err instanceof Error ? err.message : 'Impossible de déconnecter le compte Microsoft.' };
   }
 }
 

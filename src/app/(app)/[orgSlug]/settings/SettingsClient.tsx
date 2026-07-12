@@ -22,7 +22,8 @@ import {
   revokeInvitation, 
   updateMemberRole, 
   updateMemberStatus,
-  saveUserSmtpConfig
+  saveUserSmtpConfig,
+  disconnectMicrosoftAccount
 } from '@/actions/settings';
 import { createCategory, updateCategory, deleteCategory } from '@/actions/categories';
 
@@ -85,6 +86,7 @@ interface SettingsClientProps {
     smtpPass: string;
     senderName: string;
   } | null;
+  initialMicrosoftEmail: string | null;
 }
 
 export default function SettingsClient({
@@ -97,9 +99,47 @@ export default function SettingsClient({
   isDevOrLog = false,
   initialCategories,
   initialSmtpConfig,
+  initialMicrosoftEmail,
 }: SettingsClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [microsoftEmail, setMicrosoftEmail] = useState<string | null>(initialMicrosoftEmail);
+  const [microsoftError, setMicrosoftError] = useState<string | null>(null);
+  const [microsoftSuccess, setMicrosoftSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('success') === 'microsoft-connected') {
+        setMicrosoftSuccess('Votre compte Outlook a été connecté avec succès !');
+        // Clean the URL query params without reloading
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      } else if (params.get('error')) {
+        const err = params.get('error');
+        const desc = params.get('desc');
+        setMicrosoftError(`Échec de la connexion Microsoft : ${err}${desc ? ` (${desc})` : ''}`);
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+    }
+  }, []);
+
+  const handleDisconnectMicrosoft = async () => {
+    setMicrosoftError(null);
+    setMicrosoftSuccess(null);
+    startTransition(async () => {
+      try {
+        const res = await disconnectMicrosoftAccount();
+        if (res.error) throw new Error(res.error);
+        setMicrosoftEmail(null);
+        setMicrosoftSuccess('Votre compte Outlook a été déconnecté.');
+        router.refresh();
+      } catch (err: any) {
+        setMicrosoftError(err.message || 'Impossible de déconnecter le compte.');
+      }
+    });
+  };
   const [activeTab, setActiveTab] = useState<string>('general');
   const [now, setNow] = useState<number>(0);
   useEffect(() => {
@@ -1100,15 +1140,101 @@ export default function SettingsClient({
           </div>
         </TabsContent>
 
-        <TabsContent value="email" className="outline-none">
+        <TabsContent value="email" className="outline-none space-y-6">
+          {/* Section 1: Connexion moderne Microsoft Outlook */}
+          <Card className="bg-white border-slate-200 shadow-md rounded-2xl p-6 space-y-6">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <svg className="h-5 w-5" viewBox="0 0 23 23" fill="currentColor">
+                  <path d="M0 0h11v11H0z" fill="#f25022" stroke="none" />
+                  <path d="M12 0h11v11H12z" fill="#7fba00" stroke="none" />
+                  <path d="M0 12h11v11H0z" fill="#00a4ef" stroke="none" />
+                  <path d="M12 12h11v11H12z" fill="#ffb900" stroke="none" />
+                </svg>
+                Connexion moderne Microsoft Outlook (Recommandée)
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Connectez votre boîte mail Outlook (personnelle ou professionnelle) de manière sécurisée sans avoir à saisir votre mot de passe dans le CRM. Cette option utilise l'API moderne Microsoft Graph.
+              </p>
+            </div>
+
+            {microsoftError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-xs font-semibold flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4 shrink-0" />
+                {microsoftError}
+              </div>
+            )}
+            {microsoftSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                {microsoftSuccess}
+              </div>
+            )}
+
+            <div className="max-w-xl">
+              {microsoftEmail ? (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl border border-emerald-150 bg-emerald-50/20 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+                        <Mail className="h-5 w-5" />
+                      </div>
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-bold text-slate-800">Compte Microsoft Outlook connecté</p>
+                        <p className="text-[11px] text-slate-500 font-medium">{microsoftEmail}</p>
+                      </div>
+                    </div>
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[10px] font-bold">
+                      Actif
+                    </Badge>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={handleDisconnectMicrosoft}
+                      disabled={isPending}
+                      className="bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-semibold text-xs h-9 cursor-pointer"
+                    >
+                      {isPending ? 'Déconnexion...' : 'Déconnecter mon compte Outlook'}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-xs text-slate-600">
+                    Votre compte Outlook n'est pas encore connecté à l'application.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      window.location.href = `/api/auth/microsoft?orgSlug=${orgSlug}`;
+                    }}
+                    disabled={isPending}
+                    className="bg-slate-900 hover:bg-slate-850 text-white font-bold text-xs h-9 cursor-pointer flex items-center gap-2 px-4 py-2"
+                  >
+                    <svg className="h-4 w-4" viewBox="0 0 23 23" fill="currentColor">
+                      <path d="M0 0h11v11H0z" fill="#f25022" stroke="none" />
+                      <path d="M12 0h11v11H12z" fill="#7fba00" stroke="none" />
+                      <path d="M0 12h11v11H0z" fill="#00a4ef" stroke="none" />
+                      <path d="M12 12h11v11H12z" fill="#ffb900" stroke="none" />
+                    </svg>
+                    Se connecter avec Outlook
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Section 2: SMTP Classique */}
           <Card className="bg-white border-slate-200 shadow-md rounded-2xl p-6 space-y-6">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Mail className="h-5 w-5 text-primary" />
-                Messagerie personnelle (SMTP)
+                Messagerie personnelle alternative (SMTP)
               </h3>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Configurez votre propre boîte mail sortante. Une fois renseignée, tous les e-mails que vous enverrez depuis le CRM (devis aux clients, invitations) partiront de votre véritable adresse mail au lieu d'une adresse de simulation.
+                Configurez votre propre boîte mail sortante via SMTP (pour tout autre fournisseur que Microsoft Outlook).
               </p>
             </div>
 

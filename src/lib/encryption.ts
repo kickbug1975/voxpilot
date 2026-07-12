@@ -1,7 +1,11 @@
 import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-cbc';
-const ENCRYPTION_KEY = process.env.APP_ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef'; // 32 chars
+
+if (!process.env.APP_ENCRYPTION_KEY) {
+  throw new Error("CRITICAL: APP_ENCRYPTION_KEY is not defined in environment variables.");
+}
+const ENCRYPTION_KEY = process.env.APP_ENCRYPTION_KEY;
 const IV_LENGTH = 16; // AES IV length is 16 bytes
 
 export function encrypt(text: string): string {

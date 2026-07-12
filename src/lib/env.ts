@@ -24,6 +24,9 @@ const serverSchema = z.object({
   STRIPE_PRICE_STARTER: z.string().optional(),
   PUBLIC_QUOTE_TOKEN_PEPPER: z.string().min(1),
   APP_ENCRYPTION_KEY: z.string().min(1),
+  MICROSOFT_CLIENT_ID: z.string().optional(),
+  MICROSOFT_TENANT_ID: z.string().optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().optional(),
 });
 
 const isServer = typeof window === 'undefined';
@@ -52,6 +55,9 @@ const parseResult = envSchema.safeParse({
     STRIPE_PRICE_STARTER: process.env.STRIPE_PRICE_STARTER,
     PUBLIC_QUOTE_TOKEN_PEPPER: process.env.PUBLIC_QUOTE_TOKEN_PEPPER,
     APP_ENCRYPTION_KEY: process.env.APP_ENCRYPTION_KEY,
+    MICROSOFT_CLIENT_ID: process.env.MICROSOFT_CLIENT_ID,
+    MICROSOFT_TENANT_ID: process.env.MICROSOFT_TENANT_ID,
+    MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
   } : {}),
 });
 
