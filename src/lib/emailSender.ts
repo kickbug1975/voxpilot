@@ -242,6 +242,11 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
     console.error(`[EMAIL] Échec de l'envoi de l'e-mail :`, err);
 
     // Save error in database log
+    let failedProvider = 'smtp';
+    if (err instanceof Error && err.message.includes('Microsoft Graph')) {
+      failedProvider = 'microsoft';
+    }
+
     try {
       await admin.from('email_messages').insert({
         organization_id: organizationId,
@@ -249,7 +254,7 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
         to_emails: to,
         subject: subject,
         status: 'failed',
-        provider: 'smtp',
+        provider: failedProvider,
         error_message: err instanceof Error ? err.message : String(err),
         sent_by: userId,
         sent_at: new Date().toISOString()
@@ -259,9 +264,14 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
     }
 
     // Renvoyer un message d'erreur sécurisé et convivial à l'utilisateur
-    let friendlyMessage = "Une erreur est survenue lors de l'envoi de l'e-mail via votre serveur SMTP.";
-    if (err instanceof Error && err.message.includes('Authentication unsuccessful')) {
-      friendlyMessage = "Échec d'authentification avec votre serveur SMTP. Si vous utilisez Outlook, assurez-vous d'utiliser un Mot de passe d'application valide.";
+    let friendlyMessage = "Une erreur est survenue lors de l'envoi de l'e-mail.";
+    if (err instanceof Error && err.message.includes('Microsoft Graph')) {
+      friendlyMessage = `Une erreur est survenue lors de l'envoi via Microsoft Graph (Outlook) : ${err.message}`;
+    } else {
+      friendlyMessage = "Une erreur est survenue lors de l'envoi de l'e-mail via votre serveur SMTP.";
+      if (err instanceof Error && err.message.includes('Authentication unsuccessful')) {
+        friendlyMessage = "Échec d'authentification avec votre serveur SMTP. Si vous utilisez Outlook, assurez-vous d'utiliser un Mot de passe d'application valide.";
+      }
     }
 
     return { 
