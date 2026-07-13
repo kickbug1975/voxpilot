@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import fs from 'fs';
+import path from 'path';
 
 interface PdfQuote {
   quote_number: string;
@@ -121,15 +123,36 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     let currentY = 25;
 
     // Header Logo & Brand
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text('BlueMargin', margin, currentY);
+    let logoAdded = false;
+    try {
+      const publicDir = path.join(process.cwd(), 'public');
+      const pngPath = path.join(publicDir, 'logo.png');
+      const jpgPath = path.join(publicDir, 'logo.jpg');
+      
+      if (fs.existsSync(pngPath)) {
+        const logoData = fs.readFileSync(pngPath).toString('base64');
+        doc.addImage(`data:image/png;base64,${logoData}`, 'PNG', margin, currentY - 5, 45, 18);
+        logoAdded = true;
+      } else if (fs.existsSync(jpgPath)) {
+        const logoData = fs.readFileSync(jpgPath).toString('base64');
+        doc.addImage(`data:image/jpeg;base64,${logoData}`, 'JPEG', margin, currentY - 5, 45, 18);
+        logoAdded = true;
+      }
+    } catch (logoErr) {
+      console.error('Error adding logo to PDF:', logoErr);
+    }
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    doc.text('Services de Cotations & Tarifs', margin, currentY + 5);
+    if (!logoAdded) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(20);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text('BlueMargin', margin, currentY);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text('Services de Cotations & Tarifs', margin, currentY + 5);
+    }
 
     // Right side: Quote metadata
     doc.setFont('helvetica', 'bold');
