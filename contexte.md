@@ -31,9 +31,11 @@ Implémenté en juillet 2026 pour fournir des graphiques et synthèses financiè
 ---
 
 ## 4. Sécurité & Durcissement (Revue de Sécurité)
-- **Validation applicative Zod** : L'action de création de client (`createCustomer` dans `src/actions/customers.ts`) valide et nettoie l'intégralité des entrées du formulaire (format e-mail, téléphone, longueurs maximales de code, enums de cycle de vie et potentiels autorisés) avant d'exécuter des écritures.
+- **Validation applicative Zod** : L'action de création de client (`createCustomer` dans `src/actions/customers.ts`) ainsi que l'action d'enregistrement SMTP (`saveUserSmtpConfig` dans `src/actions/settings.ts`) valident et nettoient l'intégralité des entrées du formulaire (format e-mail, numéros de port de 1 à 65535, longueurs maximales de code, etc.) avant d'exécuter des écritures.
+- **Sécurisation du chiffrement** : Retrait de la clé secrète de secours par défaut dans `src/lib/encryption.ts`. Levée d'une erreur critique immédiate au démarrage si `APP_ENCRYPTION_KEY` n'est pas définie (avec un contournement propre pour la compilation statique Next.js `next build` utilisant une clé factice temporaire).
+- **Masquage des erreurs de messagerie** : Masquage sécurisé et convivial des erreurs de messagerie techniques internes dans `src/lib/emailSender.ts` (SMTP et API Microsoft Graph) pour empêcher l'exposition d'adresses IP ou d'endpoints réseau en cas d'échec d'envoi.
 - **Exclusion de Secrets** : Aucun jeton, clé secrète Supabase ou mot de passe n'est suivi par Git (les fichiers `.env*` sont exclus par `.gitignore` et gérés par variables d'environnement sur le VPS).
-- **Déploiement Coolify** : Des scripts d'ingestion et de push automatisés (`deploy-coolify.ts` et `deploy-whatsapp-backend.ts`) s'interfacent avec l'API Coolify sur le port `8000` du VPS pour propager les configurations de variables d'environnement et relancer instantanément les builds des conteneurs de production lors des mises à jour.
+- **Déploiement Coolify** : Des scripts d'ingestion et de push automatisés (`deploy-coolify.ts` et `deploy-whatsapp-backend.ts`) s'interfacent avec l'API Coolify sur le port `8000` du VPS pour propager les configurations de variables d'environnement (y compris le Client ID, Tenant ID et Client Secret de Microsoft) et relancer instantanément les builds des conteneurs de production lors des mises à jour.
 
 ---
 
@@ -51,4 +53,21 @@ Implémenté en juillet 2026 pour fournir des graphiques et synthèses financiè
   * Si un client envoie un message privé réclamant son lien (mots-clés : *"lien"*, *"portail"*, *"me connecter"*, etc.), le service génère automatiquement un token de 24h et lui transmet instantanément par WhatsApp.
 - **Tâche Cron** :
   * La route `/api/cron/reset-ghlin-stock` réinitialise tous les matins à 08h00 la colonne `in_stock_ghlin` à `false` pour tout le catalogue.
+
+---
+
+## 6. Intégration Microsoft Graph & OAuth 2.0 (Messagerie Outlook)
+Implémenté en juillet 2026 pour contourner le blocage Microsoft de l'authentification basique (Basic Auth/SMTP) et permettre une liaison fluide et moderne avec Outlook personnelle (`dimitri.puche@outlook.com`) ou professionnelle.
+- **Stockage Sécurisé** : Les jetons Microsoft sont stockés dans la table `user_microsoft_tokens` (sécurisée par RLS, seul le propriétaire y a accès) avec :
+  - `access_token` : Jeton d'accès de courte durée (Microsoft Graph).
+  - `refresh_token` : Jeton de renouvellement permanent (obtenu grâce au scope `offline_access`).
+  - `expires_at` : Date d'expiration du jeton d'accès.
+  - `email` : Adresse e-mail du compte connecté.
+- **Flux OAuth Next.js** :
+  - **Redirection (`/api/auth/microsoft`)** : Redirige l'utilisateur vers Microsoft en passant son ID et l'organisation dans le paramètre `state`. L'application Azure est configurée en mode `"signInAudience": "AzureADandPersonalMicrosoftAccount"` pour autoriser à la fois les comptes d'organisation et personnels.
+  - **Callback (`/api/auth/callback/microsoft`)** : Récupère le code, l'échange contre les jetons, récupère l'adresse e-mail de l'utilisateur via le endpoint `/me` de Graph API, l'enregistre en base de données, puis redirige avec succès vers la page des paramètres.
+- **Rafraîchissement Translucide** : Lors de l'envoi de mail, si le jeton expire dans moins de 60 secondes, `src/lib/emailSender.ts` rafraîchit automatiquement le jeton en tâche de fond avant d'exécuter la requête d'envoi.
+- **Envoi de mail** : Réalisé en appelant l'API REST officielle Microsoft Graph (`POST https://graph.microsoft.com/v1.0/me/sendMail`) avec le jeton porteur, enregistrant le statut `sent` avec le fournisseur `microsoft` dans la table `email_messages`.
+- **Déconnexion** : Une Server Action `disconnectMicrosoftAccount` permet à l'utilisateur de supprimer en toute sécurité sa liaison et ses jetons de la base de données.
+
 
