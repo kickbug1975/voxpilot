@@ -18,6 +18,7 @@ export const VoiceCrmDataSchema = z.object({
   quoteItems: z.array(VoiceQuoteItemSchema).optional(),
   queryStockData: z.object({ productName: z.string() }).optional(),
   queryPriceData: z.object({ customerName: z.string().nullable(), productName: z.string() }).optional(),
+  queryOrdersData: z.object({ customerName: z.string().nullable(), periodDays: z.number().nullable() }).optional(),
 });
 
 export const VoiceCrmResultSchema = z.object({
@@ -29,6 +30,8 @@ export const VoiceCrmResultSchema = z.object({
     'query_price',
     'query_client_summary',
     'schedule_meeting',
+    'query_orders',
+    'alert_analysis',
     'unknown'
   ]),
   transcript: z.string(),
@@ -96,6 +99,9 @@ export function validateVoiceResult(
     }
     if (rawJson.data.queryPriceData === null) {
       delete rawJson.data.queryPriceData;
+    }
+    if (rawJson.data.queryOrdersData === null) {
+      delete rawJson.data.queryOrdersData;
     }
   }
 

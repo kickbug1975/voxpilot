@@ -264,4 +264,50 @@ describe('Voice CRM Validator & Guardrails', () => {
     expect(result.data.dueDate).toBe('2026-07-20T14:00:00.000Z');
     expect(result.data.taskType).toBe('meeting');
   });
+
+  test('Validates a correct query orders extraction', () => {
+    const input = {
+      action: 'query_orders',
+      transcript: 'Combien a commandé Allo Seafood ce mois-ci ?',
+      confidence: 0.96,
+      data: {
+        customerId: 'cust-1',
+        customerName: 'Allo Seafood',
+        title: 'Consultation commandes Allo Seafood',
+        content: null,
+        dueDate: null,
+        taskType: 'other',
+        direction: null,
+        queryOrdersData: {
+          customerName: 'Allo Seafood',
+          periodDays: 30
+        }
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('query_orders');
+    expect(result.data.customerId).toBe('cust-1');
+    expect(result.data.queryOrdersData).toBeDefined();
+    expect(result.data.queryOrdersData?.customerName).toBe('Allo Seafood');
+    expect(result.data.queryOrdersData?.periodDays).toBe(30);
+  });
+
+  test('Validates a correct alert analysis extraction', () => {
+    const input = {
+      action: 'alert_analysis',
+      transcript: 'Quelles sont les alertes actives ?',
+      confidence: 0.97,
+      data: {
+        customerId: null,
+        customerName: null,
+        title: 'Analyse des alertes',
+        content: null,
+        dueDate: null,
+        taskType: 'other',
+        direction: null
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('alert_analysis');
+  });
 });

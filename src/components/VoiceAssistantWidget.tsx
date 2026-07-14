@@ -19,7 +19,7 @@ interface VoiceAssistantWidgetProps {
 }
 
 interface ExtractedData {
-  action: 'create_task' | 'create_activity' | 'create_quote' | 'query_stock' | 'query_price' | 'query_client_summary' | 'schedule_meeting' | 'unknown';
+  action: 'create_task' | 'create_activity' | 'create_quote' | 'query_stock' | 'query_price' | 'query_client_summary' | 'schedule_meeting' | 'query_orders' | 'alert_analysis' | 'unknown';
   transcript: string;
   confidence: number;
   data: {
@@ -42,6 +42,10 @@ interface ExtractedData {
     queryPriceData?: {
       customerName: string | null;
       productName: string;
+    };
+    queryOrdersData?: {
+      customerName: string | null;
+      periodDays: number | null;
     };
   };
 }
@@ -192,7 +196,9 @@ export default function VoiceAssistantWidget({
     if (
       extracted.action === 'query_stock' ||
       extracted.action === 'query_price' ||
-      extracted.action === 'query_client_summary'
+      extracted.action === 'query_client_summary' ||
+      extracted.action === 'query_orders' ||
+      extracted.action === 'alert_analysis'
     ) {
       setExtracted(null);
       return;
@@ -287,6 +293,8 @@ export default function VoiceAssistantWidget({
       case 'query_price': return "Consultation de tarif";
       case 'query_client_summary': return "Résumé client";
       case 'schedule_meeting': return "Planification de rendez-vous";
+      case 'query_orders': return "Consultation des commandes";
+      case 'alert_analysis': return "Analyse des alertes";
       default: return "Inconnu";
     }
   };
@@ -431,7 +439,11 @@ export default function VoiceAssistantWidget({
                   </Badge>
                 </div>
 
-                {(extracted.action === 'query_stock' || extracted.action === 'query_price' || extracted.action === 'query_client_summary') ? (
+                {(extracted.action === 'query_stock' || 
+                  extracted.action === 'query_price' || 
+                  extracted.action === 'query_client_summary' ||
+                  extracted.action === 'query_orders' ||
+                  extracted.action === 'alert_analysis') ? (
                   <div className="text-xs font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
                     {extracted.data.content}
                   </div>
@@ -482,7 +494,11 @@ export default function VoiceAssistantWidget({
 
               {/* BUTTONS */}
               <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
-                {(extracted.action === 'query_stock' || extracted.action === 'query_price' || extracted.action === 'query_client_summary') ? (
+                {(extracted.action === 'query_stock' || 
+                  extracted.action === 'query_price' || 
+                  extracted.action === 'query_client_summary' ||
+                  extracted.action === 'query_orders' ||
+                  extracted.action === 'alert_analysis') ? (
                   <Button 
                     size="sm" 
                     onClick={handleConfirmAction}

@@ -225,6 +225,26 @@ export function initializeWorker() {
               } else {
                 validatedResult.data.content = `Client "${validatedResult.data.customerName || 'non spécifié'}" non trouvé.`;
               }
+            } else if (validatedResult.action === 'query_orders') {
+              const adminSupabase = createAdminClient();
+              let customerId = validatedResult.data.customerId;
+              const customerName = validatedResult.data.queryOrdersData?.customerName || validatedResult.data.customerName;
+              if (!customerId && customerName) {
+                const { findClosestCustomer } = await import('./voiceQueryLookup');
+                const customer = await findClosestCustomer(adminSupabase, job.data.orgId, customerName);
+                if (customer) {
+                  customerId = customer.id;
+                  validatedResult.data.customerId = customer.id;
+                  validatedResult.data.customerName = customer.legal_name;
+                }
+              }
+              const days = validatedResult.data.queryOrdersData?.periodDays || 30;
+              const { getCustomerOrdersSummary } = await import('./voiceOrdersSummary');
+              validatedResult.data.content = await getCustomerOrdersSummary(customerId, job.data.orgId, days, adminSupabase);
+            } else if (validatedResult.action === 'alert_analysis') {
+              const adminSupabase = createAdminClient();
+              const { getAlertsSummary } = await import('./voiceOrdersSummary');
+              validatedResult.data.content = await getAlertsSummary(job.data.orgId, adminSupabase);
             }
 
             if (generation) {
