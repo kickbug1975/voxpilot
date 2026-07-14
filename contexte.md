@@ -134,6 +134,16 @@ Implémenté en juillet 2026 en parallèle pour simplifier la saisie des offres 
     *   Si c'est un devis, `evolutionController.ts` génère le numéro de séquence, insère une ligne en statut `'draft'` dans `quotes`, résout les prix et insère les lignes dans `quote_items` avec le `product_snapshot` obligatoire.
     *   Renvoie une notification instantanée sur WhatsApp : *"Devis créé en brouillon pour [Client]"*.
 
+### 🔍 Consultation de Stock et Tarifs (WhatsApp & CRM Widget)
+Implémenté en juillet 2026 pour donner un accès en temps réel aux données de stock et aux prix personnalisés :
+*   **Intention Stock (`query_stock`)** :
+    *   *CRM Widget* : Le prompt système identifie la demande, résout le produit via `performVoiceQueryLookup` et affiche directement le résultat (ex: *"Le produit Bar de ligne est disponible (Stock Ghlin: Oui)."*) avec un bouton "Fermer".
+    *   *WhatsApp Bot* : Le service `analyzeDimitriQuery` classifie l'intention. L'application recherche le produit et répond directement par WhatsApp à Dimitri (ex: *"🔍 Stock Ghlin - Bar de ligne : Disponible (Oui) | Catalogue : Actif"*).
+*   **Intention Tarif Client (`query_price`)** :
+    *   *CRM Widget* : Identifie le client et le produit demandés. Appelle `getPriceForCustomerProduct` pour calculer à la volée le prix appliqué pour ce client et l'affiche à l'écran.
+    *   *WhatsApp Bot* : Identifie le client (avec recherche floue et service de correspondance) et le produit. Résout le tarif personnalisé et l'e-mail ou l'unité associée et renvoie par WhatsApp (ex: *"💵 Tarif Client - Grain de sable : Saumon Atlantique : 18.50 €/kg"*).
+
+
 
 
 
