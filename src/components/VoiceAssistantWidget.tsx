@@ -93,6 +93,42 @@ export default function VoiceAssistantWidget({
     }
   };
 
+  // Poll job status from API until completed or failed
+  const pollJobStatus = async (jobId: string) => {
+    const maxAttempts = 40; // 40 seconds max timeout
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      const statusRes = await fetch(`/api/voice/status?jobId=${jobId}`);
+      
+      if (!statusRes.ok) {
+        const errJson = await statusRes.json();
+        throw new Error(errJson.error || "Impossible de récupérer le statut d'analyse.");
+      }
+
+      const statusData = await statusRes.json();
+
+      if (statusData.status === 'completed') {
+        const result: ExtractedData = statusData.result;
+        if (result.action === 'unknown') {
+          throw new Error("L'assistant n'a pas pu identifier d'action CRM dans votre message vocal.");
+        }
+        setExtracted(result);
+        return;
+      }
+
+      if (statusData.status === 'failed') {
+        throw new Error(statusData.error || "Le traitement audio a échoué en tâche de fond.");
+      }
+
+      // Wait 1 second before next poll request
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    throw new Error("Délai d'attente dépassé pour l'analyse de votre message audio.");
+  };
+
   // Send audio to API route for processing
   const processAudio = async (audioBlob: Blob) => {
     setIsProcessing(true);
@@ -113,13 +149,18 @@ export default function VoiceAssistantWidget({
         throw new Error(errJson.error || "Erreur lors du traitement de la voix.");
       }
 
-      const result: ExtractedData = await res.json();
-      
-      if (result.action === 'unknown') {
-        throw new Error("L'assistant n'a pas pu identifier d'action CRM dans votre message vocal.");
-      }
+      const responseData = await res.json();
 
-      setExtracted(result);
+      if (responseData.jobId) {
+        // Queue is active, start polling
+        await pollJobStatus(responseData.jobId);
+      } else {
+        // Graceful fallback: synchronous response
+        if (responseData.action === 'unknown') {
+          throw new Error("L'assistant n'a pas pu identifier d'action CRM dans votre message vocal.");
+        }
+        setExtracted(responseData);
+      }
     } catch (err: any) {
       console.error('Error processing voice audio:', err);
       setErrorMsg(err.message || "Une erreur est survenue lors de l'analyse vocale.");

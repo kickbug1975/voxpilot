@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { env } from '@/lib/env';
 import { langfuse } from '@/lib/langfuse';
+import { voiceQueue } from '@/lib/queue';
 
 export async function POST(req: NextRequest) {
   let trace: any = null;
@@ -85,9 +86,67 @@ Règles de détection et d'extraction :
 4. Types : Mappe le type d'action sur "taskType" : 'call', 'email', 'visit', 'meeting', 'quote', 'quote_follow_up' ou 'other'.
 5. Sens : Pour les appels/emails, indique la direction ("inbound" ou "outbound").`;
 
-    trace = null;
-    generation = null;
+    const response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: 'voice_crm_extraction',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            action: { type: 'string', enum: ['create_task', 'create_activity', 'unknown'] },
+            transcript: { type: 'string' },
+            confidence: { type: 'number' },
+            data: {
+              type: 'object',
+              properties: {
+                customerId: { type: ['string', 'null'] },
+                customerName: { type: ['string', 'null'] },
+                title: { type: 'string' },
+                content: { type: ['string', 'null'] },
+                dueDate: { type: ['string', 'null'] },
+                taskType: { type: 'string', enum: ['call', 'email', 'visit', 'meeting', 'quote', 'quote_follow_up', 'other'] },
+                direction: { type: ['string', 'null'], enum: ['inbound', 'outbound', null] }
+              },
+              required: [
+                'customerId',
+                'customerName',
+                'title',
+                'content',
+                'dueDate',
+                'taskType',
+                'direction'
+              ],
+              additionalProperties: false
+            }
+          },
+          required: ['action', 'transcript', 'confidence', 'data'],
+          additionalProperties: false
+        }
+      }
+    };
 
+    // If BullMQ voice queue is configured, delegate processing to worker
+    if (voiceQueue) {
+      console.log(`[VOICE] Mise en file d'attente du job de transcription pour ${file.name}`);
+      const job = await voiceQueue.add('process-voice', {
+        fileDataUri,
+        apiKey,
+        systemPrompt,
+        NEXT_PUBLIC_APP_URL: env.NEXT_PUBLIC_APP_URL,
+        response_format,
+        userId: user.id,
+        orgId: org.id,
+        orgSlug,
+        filename: file.name,
+        fileSize: file.size
+      });
+      return NextResponse.json({ success: true, jobId: job.id });
+    }
+
+    // Fallback: Synchronous execution if Redis is not configured
+    console.log('[VOICE] Mode asynchrone désactivé (Redis absent), traitement synchrone.');
+    
     if (langfuse) {
       trace = langfuse.trace({
         name: 'voice-crm-processing',
@@ -106,142 +165,74 @@ Règles de détection et d'extraction :
     }
 
     const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
-          'X-Title': 'VoxPilot Voice Assistant'
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-3.5-flash',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Analyse cet enregistrement audio commercial.'
-                },
-                {
-                  type: 'file',
-                  file: {
-                    filename: 'audio.webm',
-                    file_data: fileDataUri
-                  }
-                }
-              ]
-            }
-          ],
-          response_format: {
-            type: 'json_schema',
-            json_schema: {
-              name: 'voice_crm_extraction',
-              strict: true,
-              schema: {
-                type: 'object',
-                properties: {
-                  action: { type: 'string', enum: ['create_task', 'create_activity', 'unknown'] },
-                  transcript: { type: 'string' },
-                  confidence: { type: 'number' },
-                  data: {
-                    type: 'object',
-                    properties: {
-                      customerId: { type: ['string', 'null'] },
-                      customerName: { type: ['string', 'null'] },
-                      title: { type: 'string' },
-                      content: { type: ['string', 'null'] },
-                      dueDate: { type: ['string', 'null'] },
-                      taskType: { type: 'string', enum: ['call', 'email', 'visit', 'meeting', 'quote', 'quote_follow_up', 'other'] },
-                      direction: { type: ['string', 'null'], enum: ['inbound', 'outbound', null] }
-                    },
-                    required: [
-                      'customerId',
-                      'customerName',
-                      'title',
-                      'content',
-                      'dueDate',
-                      'taskType',
-                      'direction'
-                    ],
-                    additionalProperties: false
-                  }
-                },
-                required: ['action', 'transcript', 'confidence', 'data'],
-                additionalProperties: false
-              }
-            }
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
+        'X-Title': 'VoxPilot Voice Assistant'
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-3.5-flash',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyse cet enregistrement audio commercial.' },
+              { type: 'file', file: { filename: 'audio.webm', file_data: fileDataUri } }
+            ]
           }
-        })
-      });
+        ],
+        response_format
+      })
+    });
 
-      if (!openRouterResponse.ok) {
-        const errorText = await openRouterResponse.text();
-        console.error('OpenRouter voice processing error:', errorText);
-        const errMsg = `Erreur OpenRouter API: ${openRouterResponse.statusText}`;
-        if (generation) {
-          generation.end({
-            statusMessage: errMsg + ' - ' + errorText,
-            level: 'ERROR'
-          });
-        }
-        if (langfuse) {
-          await langfuse.shutdownAsync();
-        }
-        return NextResponse.json({ error: errMsg }, { status: 500 });
-      }
-
-      const resJson = await openRouterResponse.json();
-      const content = resJson.choices?.[0]?.message?.content;
-
-      if (!content) {
-        const errMsg = 'Aucune analyse retournée par l\'IA';
-        if (generation) {
-          generation.end({
-            statusMessage: errMsg,
-            level: 'ERROR'
-          });
-        }
-        if (langfuse) {
-          await langfuse.shutdownAsync();
-        }
-        return NextResponse.json({ error: errMsg }, { status: 500 });
-      }
-
-      const parsedResult = JSON.parse(content);
-
+    if (!openRouterResponse.ok) {
+      const errorText = await openRouterResponse.text();
+      console.error('OpenRouter voice processing error:', errorText);
+      const errMsg = `Erreur OpenRouter API: ${openRouterResponse.statusText}`;
       if (generation) {
-        generation.end({
-          output: parsedResult,
-          usage: resJson.usage ? {
-            promptTokens: resJson.usage.prompt_tokens,
-            completionTokens: resJson.usage.completion_tokens,
-            totalTokens: resJson.usage.total_tokens
-          } : undefined
-        });
+        generation.end({ statusMessage: errMsg + ' - ' + errorText, level: 'ERROR' });
       }
-
-      if (langfuse) {
-        await langfuse.shutdownAsync();
-      }
-
-      return NextResponse.json(parsedResult);
-
-    } catch (error: any) {
-      console.error('Voice processing router crash:', error);
-      if (generation) {
-        generation.end({
-          statusMessage: error.message || String(error),
-          level: 'ERROR'
-        });
-      }
-      if (langfuse) {
-        await langfuse.shutdownAsync();
-      }
-      return NextResponse.json({ error: error.message || 'Erreur interne de traitement' }, { status: 500 });
+      if (langfuse) await langfuse.shutdownAsync();
+      return NextResponse.json({ error: errMsg }, { status: 500 });
     }
+
+    const resJson = await openRouterResponse.json();
+    const content = resJson.choices?.[0]?.message?.content;
+
+    if (!content) {
+      const errMsg = 'Aucune analyse retournée par l\'IA';
+      if (generation) {
+        generation.end({ statusMessage: errMsg, level: 'ERROR' });
+      }
+      if (langfuse) await langfuse.shutdownAsync();
+      return NextResponse.json({ error: errMsg }, { status: 500 });
+    }
+
+    const parsedResult = JSON.parse(content);
+
+    if (generation) {
+      generation.end({
+        output: parsedResult,
+        usage: resJson.usage ? {
+          promptTokens: resJson.usage.prompt_tokens,
+          completionTokens: resJson.usage.completion_tokens,
+          totalTokens: resJson.usage.total_tokens
+        } : undefined
+      });
+    }
+
+    if (langfuse) await langfuse.shutdownAsync();
+    return NextResponse.json(parsedResult);
+
+  } catch (error: any) {
+    console.error('Voice processing router crash:', error);
+    if (generation) {
+      generation.end({ statusMessage: error.message || String(error), level: 'ERROR' });
+    }
+    if (langfuse) await langfuse.shutdownAsync();
+    return NextResponse.json({ error: error.message || 'Erreur interne de traitement' }, { status: 500 });
+  }
 }
