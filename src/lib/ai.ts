@@ -1,4 +1,5 @@
 import { env } from './env';
+import { langfuse } from './langfuse';
 
 export interface ExtractedTariffItem {
   supplier_sku: string | null;
@@ -76,6 +77,24 @@ Ne saute aucune ligne de produit valide. Si un prix est nul ou gratuit, ignore l
       });
     }
 
+    const trace = langfuse
+      ? langfuse.trace({
+          name: 'tariff-extraction',
+          metadata: { fileName }
+        })
+      : null;
+
+    const generation = trace
+      ? trace.generation({
+          name: 'extract-tariff-data',
+          model: 'google/gemini-3.5-flash',
+          input: {
+            systemPrompt,
+            userMessage: `Extrais les tarifs du fichier suivant${fileName ? ` (${fileName})` : ''}.`
+          }
+        })
+      : null;
+
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -142,13 +161,27 @@ Ne saute aucune ligne de produit valide. Si un prix est nul ou gratuit, ignore l
       if (!response.ok) {
         const errorText = await response.text();
         console.error('OpenRouter error details:', errorText);
-        throw new Error(`Erreur API OpenRouter : ${response.statusText} (${response.status}) - ${errorText}`);
+        const errMsg = `Erreur API OpenRouter : ${response.statusText} (${response.status}) - ${errorText}`;
+        if (generation) {
+          generation.end({
+            statusMessage: errMsg,
+            level: 'ERROR'
+          });
+        }
+        throw new Error(errMsg);
       }
 
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content;
       if (!content) {
-        throw new Error("L'API OpenRouter n'a retourné aucun contenu.");
+        const errMsg = "L'API OpenRouter n'a retourné aucun contenu.";
+        if (generation) {
+          generation.end({
+            statusMessage: errMsg,
+            level: 'ERROR'
+          });
+        }
+        throw new Error(errMsg);
       }
 
       const parsed: ExtractedTariff = JSON.parse(content);
@@ -166,9 +199,33 @@ Ne saute aucune ligne de produit valide. Si un prix est nul ou gratuit, ignore l
         }));
       }
 
+      if (generation) {
+        generation.end({
+          output: parsed,
+          usage: data.usage ? {
+            promptTokens: data.usage.prompt_tokens,
+            completionTokens: data.usage.completion_tokens,
+            totalTokens: data.usage.total_tokens
+          } : undefined
+        });
+      }
+
+      if (langfuse) {
+        await langfuse.shutdownAsync();
+      }
+
       return parsed;
     } catch (error) {
       console.error('Error during AI tariff extraction:', error);
+      if (generation) {
+        generation.end({
+          statusMessage: error instanceof Error ? error.message : String(error),
+          level: 'ERROR'
+        });
+      }
+      if (langfuse) {
+        await langfuse.shutdownAsync();
+      }
       throw error;
     }
   }
