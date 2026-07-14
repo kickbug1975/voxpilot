@@ -99,5 +99,30 @@ Implémenté en juillet 2026 pour fiabiliser le système et améliorer l'expéri
   - **Suivi de l'analyse Vocale** : Intégration dans le traitement de la voix (synchrone et asynchrone dans le Worker BullMQ) pour mesurer la fidélité de la transcription et le coût des appels à Gemini-3.5-Flash.
 - **Variables d'environnement** : `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` et `LANGFUSE_BASE_URL` sont propagées et sécurisées via Coolify.
 
+---
+
+## 9. Optimisation des Prompts, Synonymes & Production-Ready (Marée B2B)
+
+### 🎙️ Moteur de Synonymes & Contexte Produits (BlueMargin)
+*   **Correction sémantique dynamique** : Intégration du cache et de l'injection des synonymes phonétiques de la table `catalog_synonyms` de Supabase (ex: `"cabi haut"` -> `"Cabillaud"`). Ces synonymes sont passés au prompt système de Gemini et appliqués lors de la validation finale pour corriger le transcript à l'écran.
+*   **Injection du Catalogue Produits** : Les noms et espèces des produits actifs de la table `products` sont dynamiquement passés en contexte dans le prompt système pour guider les correspondances lors de la dictée vocale.
+
+### 📐 Règles de Calibres Poissonnerie (Marée) - DictaMagic & BlueMargin
+Mise à jour des prompts système de VoxPilot CRM ([`route.ts`](file:///C:/Users/Dimitri/bluemargin/src/app/api/voice/process/route.ts)) et de DictaMagic ([`openaiService.ts`](file:///C:/Users/Dimitri/dicta%20magic/backend/src/services/openaiService.ts) et [`system_prompt_meeting_analysis.md`](file:///C:/Users/Dimitri/dicta%20magic/_bmad-output/system_prompt_meeting_analysis.md)) pour y inscrire vos règles métiers de calibrage marée :
+1.  **Soles** : Calibres `1 à 7` ou par double poids (`400/500`, `300/400`).
+2.  **Turbots et Barbues** : Toujours par double poids (ex: `1/2`, `2/3`, `500/1kg`). Pas de chiffre seul.
+3.  **Plies (Carrelets)** : Double poids référencé au tarif (ex: `1/2`, `500/1kg`).
+4.  **Homards** : Poids en grammes (ex: `400/500`, `500/600`, `600/800`, `800/1kg`).
+5.  **Langoustines** : Calibres exclusifs autorisés : `21/30`, `16/20`, `10/15`, `11/15`, `8/12`, `6/9`, `4/7`, `3/5`.
+6.  **Coquillages** : Tailles exclusives autorisées : `small (s)`, `Médium (m)`, `large (L)`, `jumbo (j)`, `Super-jumbo (s-j)`.
+7.  **Scampis et Gambas** : Calibres (pièces/kg) exclusifs : `21/30`, `16/20`, `13/15`, `8/12`, `6/8`, `4/6`, `2/4`.
+8.  **Huîtres** : Calibres creuses standard `N°5 à N°0` et calibres plats (`00`, `000`, `0000`).
+
+### 🧪 Tests & Déploiement en Production
+*   **Mise à jour de la Base de Données** : Exécution du script `updatePrompt.ts` de DictaMagic pour mettre à jour la version active du prompt de réunion dans la table `ai_prompts` de Supabase.
+*   **Tests unitaires Vitest** : Ajout de la suite de tests unitaires [`tests/voice.test.ts`](file:///C:/Users/Dimitri/bluemargin/tests/voice.test.ts) pour valider l'extraction vocale, les guardrails anti-injection, l'invalidation des clients hors-liste et les contraintes de dates. Tous les 123 tests globaux de l'application sont passés au vert.
+*   **Production Coolify** : Build, variables et déploiements relancés avec succès pour les conteneurs `voxpilot` et `whatsapp-app` sur le VPS.
+
+
 
 
