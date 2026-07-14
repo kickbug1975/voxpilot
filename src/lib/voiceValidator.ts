@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+export const VoiceQuoteItemSchema = z.object({
+  productId: z.string().nullable(),
+  productName: z.string(),
+  quantity: z.number().nullable(),
+  price: z.number().nullable(),
+});
+
 export const VoiceCrmDataSchema = z.object({
   customerId: z.string().nullable(),
   customerName: z.string().nullable(),
@@ -8,10 +15,11 @@ export const VoiceCrmDataSchema = z.object({
   dueDate: z.string().nullable(),
   taskType: z.enum(['call', 'email', 'visit', 'meeting', 'quote', 'quote_follow_up', 'other']),
   direction: z.enum(['inbound', 'outbound']).nullable().catch(null),
+  quoteItems: z.array(VoiceQuoteItemSchema).optional(),
 });
 
 export const VoiceCrmResultSchema = z.object({
-  action: z.enum(['create_task', 'create_activity', 'unknown']),
+  action: z.enum(['create_task', 'create_activity', 'create_quote', 'unknown']),
   transcript: z.string(),
   confidence: z.number(),
   data: VoiceCrmDataSchema,
@@ -22,6 +30,11 @@ export type VoiceCrmResult = z.infer<typeof VoiceCrmResultSchema>;
 interface AllowedCustomer {
   id: string;
   legal_name: string;
+}
+
+export interface VoiceSynonym {
+  raw_term: string;
+  normalized_term: string;
 }
 
 // Patterns typical of prompt injection attempts
@@ -42,7 +55,8 @@ const INJECTION_PATTERNS = [
 export function validateVoiceResult(
   rawJson: any,
   allowedCustomers: AllowedCustomer[],
-  currentDateStr: string
+  currentDateStr: string,
+  synonyms?: VoiceSynonym[]
 ): VoiceCrmResult {
   const fallback = (transcript = '', confidence = 0, title = 'Action inconnue ou extraction invalide'): VoiceCrmResult => ({
     action: 'unknown',
@@ -56,6 +70,7 @@ export function validateVoiceResult(
       dueDate: null,
       taskType: 'other',
       direction: null,
+      quoteItems: [],
     },
   });
 
@@ -73,6 +88,23 @@ export function validateVoiceResult(
   }
 
   const result = parseResult.data;
+
+  // 0. Rewrite transcript with synonyms if provided (Layer 2 cleanup)
+  if (synonyms && synonyms.length > 0) {
+    let rewrittenText = result.transcript;
+    const sortedSynonyms = [...synonyms].sort((a, b) => b.raw_term.length - a.raw_term.length);
+    
+    for (const syn of sortedSynonyms) {
+      const rawTerm = syn.raw_term.toLowerCase().trim();
+      const escapedTerm = rawTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp(`(?<=^|[^a-zA-Z0-9àâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ])${escapedTerm}(?=$|[^a-zA-Z0-9àâäéèêëîïôöùûüçÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ])`, 'gi');
+      
+      if (regex.test(rewrittenText)) {
+        rewrittenText = rewrittenText.replace(regex, syn.normalized_term);
+      }
+    }
+    result.transcript = rewrittenText;
+  }
 
   // 1. Prompt injection pattern detection in transcription text
   for (const pattern of INJECTION_PATTERNS) {

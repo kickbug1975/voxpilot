@@ -954,3 +954,162 @@ export async function duplicateQuote(orgSlug: string, quoteId: string, newCustom
     return { error: err instanceof Error ? err.message : 'Impossible de dupliquer le devis.' };
   }
 }
+
+export async function resolveQuoteItemsPrices(
+  orgSlug: string,
+  customerId: string | null,
+  items: { productId: string | null; productName: string; quantity: number | null; price: number | null }[]
+) {
+  try {
+    const supabase = await createClient();
+    const orgId = await getOrgId(supabase, orgSlug);
+
+    // Get org settings
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('default_margin_rate, default_rounding_rule')
+      .eq('id', orgId)
+      .single();
+
+    const defaultMarginRate = org?.default_margin_rate ? parseFloat(org.default_margin_rate) : 0.20;
+    const defaultRoundingRule = org?.default_rounding_rule || 'up_0_05';
+
+    // Fetch margin rules
+    const { data: rules } = await supabase
+      .from('margin_rules')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('is_active', true);
+    const activeRules = rules || [];
+
+    const resolvedItems = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      let productId = item.productId;
+      let productName = item.productName;
+
+      // 1. If product ID is not set, look up by name
+      if (!productId) {
+        const { data: matchedProd } = await supabase
+          .from('products')
+          .select('id, name, category_id, default_yield_rate')
+          .eq('organization_id', orgId)
+          .eq('is_active', true)
+          .ilike('name', productName)
+          .limit(1)
+          .single();
+
+        if (matchedProd) {
+          productId = matchedProd.id;
+          productName = matchedProd.name;
+        } else {
+          // partial match fallback
+          const { data: partialProds } = await supabase
+            .from('products')
+            .select('id, name, category_id, default_yield_rate')
+            .eq('organization_id', orgId)
+            .eq('is_active', true)
+            .ilike('name', `%${productName}%`)
+            .limit(1);
+
+          if (partialProds && partialProds.length > 0) {
+            productId = partialProds[0].id;
+            productName = partialProds[0].name;
+          }
+        }
+      }
+
+      if (!productId) {
+        console.warn(`Product not found for name: ${productName}`);
+        continue;
+      }
+
+      // Fetch the actual product details for category_id and default_yield_rate
+      const { data: product } = await supabase
+        .from('products')
+        .select('category_id, default_yield_rate')
+        .eq('id', productId)
+        .single();
+
+      // 2. Resolve price if not specified
+      let finalPrice = item.price;
+      if (finalPrice === null || finalPrice === undefined || finalPrice <= 0) {
+        // Fetch landed cost
+        const { data: sps } = await supabase
+          .from('supplier_products')
+          .select('current_landed_cost, current_purchase_price, conversion_factor, yield_rate, transport_cost, handling_cost, other_fixed_cost, other_cost_percent')
+          .eq('product_id', productId)
+          .eq('organization_id', orgId)
+          .eq('is_active', true);
+
+        let currentLandedCost = 0;
+        if (sps && sps.length > 0) {
+          const computedCosts = sps.map(sp => {
+            const spYield = sp.yield_rate ? parseFloat(sp.yield_rate) : 1.0;
+            const yieldRate = spYield !== 1.0 ? spYield : parseFloat(product?.default_yield_rate || '1.0');
+            const handlingCost = parseFloat(sp.handling_cost || '0.0');
+            const result = PricingEngine.calculateLandedCost({
+              purchasePrice: parseFloat(sp.current_purchase_price || '0'),
+              conversionFactor: parseFloat(sp.conversion_factor || '1.0'),
+              yieldRate: yieldRate,
+              transportCostPerSalesUnit: parseFloat(sp.transport_cost || '0'),
+              handlingCostPerSalesUnit: handlingCost,
+              otherFixedCostPerSalesUnit: parseFloat(sp.other_fixed_cost || '0'),
+              otherCostPercent: parseFloat(sp.other_cost_percent || '0'),
+            });
+            return result.landedCost.toNumber();
+          });
+          currentLandedCost = Math.min(...computedCosts);
+        }
+
+        // Resolve target margin
+        const resolvedRule = PricingEngine.resolveMarginRule(
+          {
+            productId: productId,
+            categoryId: product?.category_id || null,
+            customerId: customerId,
+            referenceDate: new Date().toISOString().split('T')[0],
+          },
+          activeRules.map(r => ({
+            id: r.id,
+            scope: r.scope as any,
+            customer_id: r.customer_id,
+            category_id: r.category_id,
+            product_id: r.product_id,
+            target_margin_rate: parseFloat(r.target_margin_rate),
+            priority: r.priority,
+            is_active: r.is_active,
+            valid_from: r.valid_from,
+            valid_to: r.valid_to,
+          })),
+          defaultMarginRate
+        );
+
+        // Compute recommended price
+        const recResult = PricingEngine.calculateRecommendedPrice(
+          currentLandedCost,
+          resolvedRule.targetMarginRate,
+          defaultRoundingRule
+        );
+        finalPrice = recResult.recommendedPrice.toNumber();
+      }
+
+      resolvedItems.push({
+        product_id: productId,
+        quantity: item.quantity,
+        unit_price: finalPrice || 0,
+        discount_rate: 0,
+        override_justification: null,
+        position: resolvedItems.length + 1,
+        description: null,
+        is_transformed: true,
+      });
+    }
+
+    return { data: resolvedItems };
+  } catch (err) {
+    console.error('Error resolving product prices:', err);
+    return { error: err instanceof Error ? err.message : 'Impossible de résoudre les prix des produits.' };
+  }
+}

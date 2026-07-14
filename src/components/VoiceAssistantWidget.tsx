@@ -9,6 +9,8 @@ import {
   Mic, X, Clock, User, Check, Loader2, 
   Trash2, AlertCircle, FileText, Calendar, Sparkles
 } from 'lucide-react';
+import { createQuote, saveQuoteItems, resolveQuoteItemsPrices } from '@/actions/quotes';
+
 interface VoiceAssistantWidgetProps {
   orgSlug: string;
   createTaskAction: (orgSlug: string, formData: FormData) => Promise<{ success?: boolean; data?: any; error?: string }>;
@@ -16,7 +18,7 @@ interface VoiceAssistantWidgetProps {
 }
 
 interface ExtractedData {
-  action: 'create_task' | 'create_activity' | 'unknown';
+  action: 'create_task' | 'create_activity' | 'create_quote' | 'unknown';
   transcript: string;
   confidence: number;
   data: {
@@ -27,6 +29,12 @@ interface ExtractedData {
     dueDate: string | null;
     taskType: 'call' | 'email' | 'visit' | 'meeting' | 'quote' | 'quote_follow_up' | 'other';
     direction: 'inbound' | 'outbound' | null;
+    quoteItems?: {
+      productId: string | null;
+      productName: string;
+      quantity: number | null;
+      price: number | null;
+    }[];
   };
 }
 
@@ -202,6 +210,30 @@ export default function VoiceAssistantWidget({
           if (res.error) throw new Error(res.error);
 
           setSuccessMsg("Activité enregistrée avec succès !");
+        } else if (extracted.action === 'create_quote') {
+          if (!actionData.customerId) {
+            throw new Error("Client non spécifié ou non reconnu. Impossible de créer le devis.");
+          }
+          
+          // Create the quote header
+          const quoteRes = await createQuote(orgSlug, actionData.customerId, actionData.title);
+          if (quoteRes.error) throw new Error(quoteRes.error);
+          
+          const quoteId = quoteRes.quoteId;
+          if (!quoteId) throw new Error("ID du devis manquant après création.");
+
+          // Map/resolve quote items prices
+          const itemsToResolve = actionData.quoteItems || [];
+          const resolveRes = await resolveQuoteItemsPrices(orgSlug, actionData.customerId, itemsToResolve);
+          if (resolveRes.error) throw new Error(resolveRes.error);
+
+          const resolvedItems = resolveRes.data || [];
+
+          // Save the quote items
+          const saveRes = await saveQuoteItems(orgSlug, quoteId, resolvedItems);
+          if (saveRes.error) throw new Error(saveRes.error);
+
+          setSuccessMsg("Devis créé avec succès !");
         }
 
         // Reset widget after success
@@ -222,6 +254,7 @@ export default function VoiceAssistantWidget({
     switch (action) {
       case 'create_task': return "Création d'une tâche";
       case 'create_activity': return "Enregistrement d'activité";
+      case 'create_quote': return "Création d'un devis";
       default: return "Inconnu";
     }
   };
@@ -388,6 +421,21 @@ export default function VoiceAssistantWidget({
                 {extracted.data.content && (
                   <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-1.5 mt-1 leading-relaxed">
                     {extracted.data.content}
+                  </div>
+                )}
+
+                {extracted.action === 'create_quote' && extracted.data.quoteItems && extracted.data.quoteItems.length > 0 && (
+                  <div className="text-xs text-slate-600 border-t border-slate-100 pt-1.5 mt-1 space-y-1">
+                    <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400">Articles détectés :</span>
+                    <ul className="list-disc list-inside space-y-0.5 font-medium">
+                      {extracted.data.quoteItems.map((item, idx) => (
+                        <li key={idx} className="text-slate-700">
+                          {item.productName}
+                          {item.quantity !== null && ` x ${item.quantity}`}
+                          {item.price !== null && ` (${item.price} €)`}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>

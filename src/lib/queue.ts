@@ -126,7 +126,8 @@ export function initializeWorker() {
             NEXT_PUBLIC_APP_URL, 
             response_format,
             allowedCustomers,
-            currentDate
+            currentDate,
+            synonyms
           } = job.data;
           
           // Trace Langfuse inside the worker if active
@@ -199,7 +200,7 @@ export function initializeWorker() {
             }
 
             const parsedResult = JSON.parse(content);
-            const validatedResult = validateVoiceResult(parsedResult, allowedCustomers || [], currentDate);
+            const validatedResult = validateVoiceResult(parsedResult, allowedCustomers || [], currentDate, synonyms || []);
 
             if (generation) {
               generation.end({

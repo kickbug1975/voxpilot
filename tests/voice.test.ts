@@ -109,4 +109,44 @@ describe('Voice CRM Validator & Guardrails', () => {
     expect(resultFuture.action).toBe('unknown');
     expect(resultFuture.data.dueDate).toBeNull();
   });
+
+  test('Validates a correct quote extraction', () => {
+    const input = {
+      action: 'create_quote',
+      transcript: 'Fais-moi un devis pour Allo Seafood avec 5 Soles 3 et 10 Homards',
+      confidence: 0.96,
+      data: {
+        customerId: 'cust-1',
+        customerName: 'Allo Seafood',
+        title: 'Devis pour Allo Seafood',
+        content: null,
+        dueDate: null,
+        taskType: 'quote',
+        direction: null,
+        quoteItems: [
+          {
+            productId: 'prod-sole',
+            productName: 'Sole 3',
+            quantity: 5,
+            price: null
+          },
+          {
+            productId: null,
+            productName: 'Homard 400/500',
+            quantity: 10,
+            price: 25.5
+          }
+        ]
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('create_quote');
+    expect(result.data.customerId).toBe('cust-1');
+    expect(result.data.customerName).toBe('Allo Seafood');
+    expect(result.data.quoteItems).toBeDefined();
+    expect(result.data.quoteItems?.length).toBe(2);
+    expect(result.data.quoteItems?.[0].productName).toBe('Sole 3');
+    expect(result.data.quoteItems?.[0].quantity).toBe(5);
+    expect(result.data.quoteItems?.[1].price).toBe(25.5);
+  });
 });
