@@ -123,6 +123,18 @@ Mise à jour des prompts système de VoxPilot CRM ([`route.ts`](file:///C:/Users
 *   **Tests unitaires Vitest** : Ajout de la suite de tests unitaires [`tests/voice.test.ts`](file:///C:/Users/Dimitri/bluemargin/tests/voice.test.ts) pour valider l'extraction vocale, les guardrails anti-injection, l'invalidation des clients hors-liste et les contraintes de dates. Tous les 123 tests globaux de l'application sont passés au vert.
 *   **Production Coolify** : Build, variables et déploiements relancés avec succès pour les conteneurs `voxpilot` et `whatsapp-app` sur le VPS.
 
+### 📄 Saisie Vocale et Structurée de Devis (WhatsApp & CRM Widget)
+Implémenté en juillet 2026 en parallèle pour simplifier la saisie des offres de prix en déplacement :
+*   **Widget Vocal CRM (`create_quote`)** :
+    *   Le prompt système extrait la liste des articles (`quoteItems`) contenant `productId`, `productName`, `quantity` et `price`.
+    *   La confirmation appelle `createQuote` (génération automatique de numéro séquentiel), puis appelle `resolveQuoteItemsPrices` (lookups de prix et coûts fournisseur à l'instant T) et enfin insère dans `quote_items` via `saveQuoteItems`.
+    *   Le composant `VoiceAssistantWidget.tsx` affiche désormais un aperçu structuré des articles détectés avant confirmation.
+*   **WhatsApp Bot (`est_un_devis`)** :
+    *   Le parseur `parseWhatsAppGroupOrder` détecte si la demande est un devis (`est_un_devis = true`) vs commande ferme.
+    *   Si c'est un devis, `evolutionController.ts` génère le numéro de séquence, insère une ligne en statut `'draft'` dans `quotes`, résout les prix et insère les lignes dans `quote_items` avec le `product_snapshot` obligatoire.
+    *   Renvoie une notification instantanée sur WhatsApp : *"Devis créé en brouillon pour [Client]"*.
+
+
 
 
 
