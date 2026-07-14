@@ -6,6 +6,6 @@ export const langfuse =
     ? new Langfuse({
         publicKey: env.LANGFUSE_PUBLIC_KEY,
         secretKey: env.LANGFUSE_SECRET_KEY,
-        baseUrl: env.LANGFUSE_HOST || 'https://cloud.langfuse.com',
+        baseUrl: env.LANGFUSE_BASE_URL || 'https://cloud.langfuse.com',
       })
     : null;

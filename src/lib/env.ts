@@ -29,7 +29,7 @@ const serverSchema = z.object({
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
-  LANGFUSE_HOST: z.string().optional(),
+  LANGFUSE_BASE_URL: z.string().optional(),
 });
 
 const isServer = typeof window === 'undefined';
@@ -63,7 +63,7 @@ const parseResult = envSchema.safeParse({
     MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
-    LANGFUSE_HOST: process.env.LANGFUSE_HOST,
+    LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
   } : {}),
 });
 
