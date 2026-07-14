@@ -152,6 +152,16 @@ Implémenté en juillet 2026 pour optimiser la préparation des rendez-vous et l
     *   *CRM Widget* : Permet de dicter un rendez-vous (visite ou réunion) à une date/heure spécifique. À la confirmation, la server action `scheduleVoiceMeeting` crée la tâche dans le CRM, vérifie les jetons Microsoft OAuth de l'utilisateur, rafraîchit si besoin et planifie l'événement en direct dans son calendrier Outlook en Europe/Brussels (Graph API `/events`).
     *   *WhatsApp Bot* : Fait la même opération en direct depuis un message texte ou audio WhatsApp reçu de Dimitri, enregistrant le rendez-vous dans le CRM et dans son calendrier Outlook, puis répondant par un message de confirmation.
 
+### 📈 Volumes de Ventes et Alertes Actives (WhatsApp & CRM Widget)
+Implémenté en juillet 2026 pour analyser les performances des ventes et la gestion des risques opérationnels :
+*   **Intention Analyse de Commandes / Volumes (`query_orders`)** :
+    *   *CRM Widget* : L'IA identifie si Dimitri recherche l'historique d'un client spécifique ou le total global sur une période (ex: 30 jours par défaut). Calcule le volume en kg, le nombre total de commandes et le montant global de ventes en devises (via `getCustomerOrdersSummary` dans `voiceOrdersSummary.ts`). Affiche le résultat directement à l'écran.
+    *   *WhatsApp Bot* : Effectue les mêmes agrégations de données B2B en base et renvoie un rapport synthétique par message WhatsApp (ex: *"Maison Cocher a passé 3 commandes ces 30 derniers jours, totalisant 180 kg pour 2,450 €"*).
+*   **Intention Analyse des Alertes Actives (`alert_analysis`)** :
+    *   *CRM Widget* : Récupère les alertes non résolues/non lues de l'organisation dans la table `alerts` (par priorité décroissante) et les liste à l'écran (alertes de perte de marge, churn de volume, ou litiges).
+    *   *WhatsApp Bot* : Interroge la table `alerts` pour Dimitri et renvoie la liste triée avec emojis de priorité (🔴 pour critique/haute, 🟡 pour moyenne, 🔵 pour basse).
+
+
 
 
 
