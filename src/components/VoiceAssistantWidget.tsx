@@ -18,7 +18,7 @@ interface VoiceAssistantWidgetProps {
 }
 
 interface ExtractedData {
-  action: 'create_task' | 'create_activity' | 'create_quote' | 'unknown';
+  action: 'create_task' | 'create_activity' | 'create_quote' | 'query_stock' | 'query_price' | 'unknown';
   transcript: string;
   confidence: number;
   data: {
@@ -35,6 +35,13 @@ interface ExtractedData {
       quantity: number | null;
       price: number | null;
     }[];
+    queryStockData?: {
+      productName: string;
+    };
+    queryPriceData?: {
+      customerName: string | null;
+      productName: string;
+    };
   };
 }
 
@@ -181,6 +188,11 @@ export default function VoiceAssistantWidget({
   const handleConfirmAction = () => {
     if (!extracted) return;
 
+    if (extracted.action === 'query_stock' || extracted.action === 'query_price') {
+      setExtracted(null);
+      return;
+    }
+
     startActionTransition(async () => {
       try {
         const actionData = extracted.data;
@@ -255,6 +267,8 @@ export default function VoiceAssistantWidget({
       case 'create_task': return "Création d'une tâche";
       case 'create_activity': return "Enregistrement d'activité";
       case 'create_quote': return "Création d'un devis";
+      case 'query_stock': return "Consultation de stock";
+      case 'query_price': return "Consultation de tarif";
       default: return "Inconnu";
     }
   };
@@ -399,66 +413,86 @@ export default function VoiceAssistantWidget({
                   </Badge>
                 </div>
 
-                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <span className="text-sm">{getTaskTypeIcon(extracted.data.taskType)}</span>
-                  {extracted.data.title}
-                </div>
-
-                {extracted.data.customerName && (
-                  <div className="text-xs text-slate-600 flex items-center gap-1.5 font-medium">
-                    <User className="h-3.5 w-3.5 text-slate-400" />
-                    Client : <span className="font-bold text-slate-700">{extracted.data.customerName}</span>
-                  </div>
-                )}
-
-                {extracted.data.dueDate && (
-                  <div className="text-xs text-slate-600 flex items-center gap-1.5 font-medium">
-                    <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                    Échéance : <span className="font-bold text-slate-700">{formatDueDate(extracted.data.dueDate)}</span>
-                  </div>
-                )}
-
-                {extracted.data.content && (
-                  <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-1.5 mt-1 leading-relaxed">
+                {(extracted.action === 'query_stock' || extracted.action === 'query_price') ? (
+                  <div className="text-xs font-semibold text-slate-800 leading-relaxed">
                     {extracted.data.content}
                   </div>
-                )}
+                ) : (
+                  <>
+                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <span className="text-sm">{getTaskTypeIcon(extracted.data.taskType)}</span>
+                      {extracted.data.title}
+                    </div>
 
-                {extracted.action === 'create_quote' && extracted.data.quoteItems && extracted.data.quoteItems.length > 0 && (
-                  <div className="text-xs text-slate-600 border-t border-slate-100 pt-1.5 mt-1 space-y-1">
-                    <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400">Articles détectés :</span>
-                    <ul className="list-disc list-inside space-y-0.5 font-medium">
-                      {extracted.data.quoteItems.map((item, idx) => (
-                        <li key={idx} className="text-slate-700">
-                          {item.productName}
-                          {item.quantity !== null && ` x ${item.quantity}`}
-                          {item.price !== null && ` (${item.price} €)`}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                    {extracted.data.customerName && (
+                      <div className="text-xs text-slate-600 flex items-center gap-1.5 font-medium">
+                        <User className="h-3.5 w-3.5 text-slate-400" />
+                        Client : <span className="font-bold text-slate-700">{extracted.data.customerName}</span>
+                      </div>
+                    )}
+
+                    {extracted.data.dueDate && (
+                      <div className="text-xs text-slate-600 flex items-center gap-1.5 font-medium">
+                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                        Échéance : <span className="font-bold text-slate-700">{formatDueDate(extracted.data.dueDate)}</span>
+                      </div>
+                    )}
+
+                    {extracted.data.content && (
+                      <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-1.5 mt-1 leading-relaxed">
+                        {extracted.data.content}
+                      </div>
+                    )}
+
+                    {extracted.action === 'create_quote' && extracted.data.quoteItems && extracted.data.quoteItems.length > 0 && (
+                      <div className="text-xs text-slate-600 border-t border-slate-100 pt-1.5 mt-1 space-y-1">
+                        <span className="font-bold text-[10px] uppercase tracking-wider text-slate-400">Articles détectés :</span>
+                        <ul className="list-disc list-inside space-y-0.5 font-medium">
+                          {extracted.data.quoteItems.map((item, idx) => (
+                            <li key={idx} className="text-slate-700">
+                              {item.productName}
+                              {item.quantity !== null && ` x ${item.quantity}`}
+                              {item.price !== null && ` (${item.price} €)`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
               {/* BUTTONS */}
               <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  onClick={() => setExtracted(null)}
-                  className="text-xs font-bold text-slate-500 hover:text-slate-800"
-                >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  Effacer
-                </Button>
-                <Button 
-                  size="sm" 
-                  onClick={handleConfirmAction}
-                  className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
-                >
-                  <Check className="h-3.5 w-3.5 mr-1" />
-                  Confirmer
-                </Button>
+                {(extracted.action === 'query_stock' || extracted.action === 'query_price') ? (
+                  <Button 
+                    size="sm" 
+                    onClick={handleConfirmAction}
+                    className="text-xs font-bold bg-primary hover:bg-primary/90 text-white cursor-pointer"
+                  >
+                    Fermer
+                  </Button>
+                ) : (
+                  <>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => setExtracted(null)}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-800"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Effacer
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      onClick={handleConfirmAction}
+                      className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                    >
+                      <Check className="h-3.5 w-3.5 mr-1" />
+                      Confirmer
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           )}

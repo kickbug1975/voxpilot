@@ -16,10 +16,12 @@ export const VoiceCrmDataSchema = z.object({
   taskType: z.enum(['call', 'email', 'visit', 'meeting', 'quote', 'quote_follow_up', 'other']),
   direction: z.enum(['inbound', 'outbound']).nullable().catch(null),
   quoteItems: z.array(VoiceQuoteItemSchema).optional(),
+  queryStockData: z.object({ productName: z.string() }).optional(),
+  queryPriceData: z.object({ customerName: z.string().nullable(), productName: z.string() }).optional(),
 });
 
 export const VoiceCrmResultSchema = z.object({
-  action: z.enum(['create_task', 'create_activity', 'create_quote', 'unknown']),
+  action: z.enum(['create_task', 'create_activity', 'create_quote', 'query_stock', 'query_price', 'unknown']),
   transcript: z.string(),
   confidence: z.number(),
   data: VoiceCrmDataSchema,
@@ -76,6 +78,16 @@ export function validateVoiceResult(
 
   if (!rawJson || typeof rawJson !== 'object') {
     return fallback();
+  }
+
+  // Sanitize null values for optional zod fields
+  if (rawJson.data && typeof rawJson.data === 'object') {
+    if (rawJson.data.queryStockData === null) {
+      delete rawJson.data.queryStockData;
+    }
+    if (rawJson.data.queryPriceData === null) {
+      delete rawJson.data.queryPriceData;
+    }
   }
 
   // Parse the raw JSON using Zod

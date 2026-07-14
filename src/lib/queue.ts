@@ -3,6 +3,8 @@ import IORedis from 'ioredis';
 import { env } from './env';
 import { sendEmailDirect } from './emailSender';
 import { validateVoiceResult } from './voiceValidator';
+import { createAdminClient } from './supabase/admin';
+import { performVoiceQueryLookup } from './voiceQueryLookup';
 
 const globalForRedis = globalThis as unknown as {
   redisConnection: IORedis | undefined;
@@ -201,6 +203,11 @@ export function initializeWorker() {
 
             const parsedResult = JSON.parse(content);
             const validatedResult = validateVoiceResult(parsedResult, allowedCustomers || [], currentDate, synonyms || []);
+
+            if (validatedResult.action === 'query_stock' || validatedResult.action === 'query_price') {
+              const adminSupabase = createAdminClient();
+              await performVoiceQueryLookup(validatedResult, job.data.orgId, adminSupabase);
+            }
 
             if (generation) {
               generation.end({

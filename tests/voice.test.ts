@@ -149,4 +149,54 @@ describe('Voice CRM Validator & Guardrails', () => {
     expect(result.data.quoteItems?.[0].quantity).toBe(5);
     expect(result.data.quoteItems?.[1].price).toBe(25.5);
   });
+
+  test('Validates a correct stock query extraction', () => {
+    const input = {
+      action: 'query_stock',
+      transcript: 'Est-ce qu\'on a du bar de ligne à Ghlin ?',
+      confidence: 0.98,
+      data: {
+        customerId: null,
+        customerName: null,
+        title: 'Consultation Stock Bar de ligne',
+        content: null,
+        dueDate: null,
+        taskType: 'other',
+        direction: null,
+        queryStockData: {
+          productName: 'bar de ligne'
+        }
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('query_stock');
+    expect(result.data.queryStockData).toBeDefined();
+    expect(result.data.queryStockData?.productName).toBe('bar de ligne');
+  });
+
+  test('Validates a correct price query extraction', () => {
+    const input = {
+      action: 'query_price',
+      transcript: 'Quel est le prix du saumon pour Grain de sable ?',
+      confidence: 0.97,
+      data: {
+        customerId: null,
+        customerName: null,
+        title: 'Consultation Tarif Saumon',
+        content: null,
+        dueDate: null,
+        taskType: 'other',
+        direction: null,
+        queryPriceData: {
+          productName: 'saumon',
+          customerName: 'Grain de sable'
+        }
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('query_price');
+    expect(result.data.queryPriceData).toBeDefined();
+    expect(result.data.queryPriceData?.productName).toBe('saumon');
+    expect(result.data.queryPriceData?.customerName).toBe('Grain de sable');
+  });
 });
