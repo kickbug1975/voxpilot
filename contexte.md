@@ -143,6 +143,16 @@ Implémenté en juillet 2026 pour donner un accès en temps réel aux données d
     *   *CRM Widget* : Identifie le client et le produit demandés. Appelle `getPriceForCustomerProduct` pour calculer à la volée le prix appliqué pour ce client et l'affiche à l'écran.
     *   *WhatsApp Bot* : Identifie le client (avec recherche floue et service de correspondance) et le produit. Résout le tarif personnalisé et l'e-mail ou l'unité associée et renvoie par WhatsApp (ex: *"💵 Tarif Client - Grain de sable : Saumon Atlantique : 18.50 €/kg"*).
 
+### 🏢 Résumé Client et Planification Outlook (WhatsApp & CRM Widget)
+Implémenté en juillet 2026 pour optimiser la préparation des rendez-vous et la prise de rendez-vous sur la route :
+*   **Intention Fiche Synthèse Client (`query_client_summary`)** :
+    *   *CRM Widget* : L'IA extrait le client, calcule sa marge moyenne, récupère le statut et montant de sa dernière commande, la liste de ses devis actifs et ses tâches ouvertes, puis affiche le tout à l'écran (`getCustomerSummary` dans `voiceCustomerSummary.ts`).
+    *   *WhatsApp Bot* : Le chatbot analyse le message, effectue un rapprochement flou du client, construit la même synthèse et l'envoie en direct par WhatsApp à Dimitri.
+*   **Intention Planification de Réunion (`schedule_meeting`)** :
+    *   *CRM Widget* : Permet de dicter un rendez-vous (visite ou réunion) à une date/heure spécifique. À la confirmation, la server action `scheduleVoiceMeeting` crée la tâche dans le CRM, vérifie les jetons Microsoft OAuth de l'utilisateur, rafraîchit si besoin et planifie l'événement en direct dans son calendrier Outlook en Europe/Brussels (Graph API `/events`).
+    *   *WhatsApp Bot* : Fait la même opération en direct depuis un message texte ou audio WhatsApp reçu de Dimitri, enregistrant le rendez-vous dans le CRM et dans son calendrier Outlook, puis répondant par un message de confirmation.
+
+
 
 
 
