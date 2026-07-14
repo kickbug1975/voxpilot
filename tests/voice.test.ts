@@ -199,4 +199,69 @@ describe('Voice CRM Validator & Guardrails', () => {
     expect(result.data.queryPriceData?.productName).toBe('saumon');
     expect(result.data.queryPriceData?.customerName).toBe('Grain de sable');
   });
+
+  test('Validates a correct client summary query extraction', () => {
+    const input = {
+      action: 'query_client_summary',
+      transcript: 'Donne-moi le résumé de Allo Seafood',
+      confidence: 0.94,
+      data: {
+        customerId: 'cust-1',
+        customerName: 'Allo Seafood',
+        title: 'Résumé pour Allo Seafood',
+        content: null,
+        dueDate: null,
+        taskType: 'other',
+        direction: null
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('query_client_summary');
+    expect(result.data.customerId).toBe('cust-1');
+    expect(result.data.customerName).toBe('Allo Seafood');
+  });
+
+  test('Preserves customerName even if customerId is missing/invalid for query_client_summary', () => {
+    const input = {
+      action: 'query_client_summary',
+      transcript: 'Donne-moi le résumé de Inconnu SAS',
+      confidence: 0.92,
+      data: {
+        customerId: null,
+        customerName: 'Inconnu SAS',
+        title: 'Résumé pour Inconnu SAS',
+        content: null,
+        dueDate: null,
+        taskType: 'other',
+        direction: null
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('query_client_summary');
+    expect(result.data.customerId).toBeNull();
+    expect(result.data.customerName).toBe('Inconnu SAS');
+  });
+
+  test('Validates a correct meeting schedule extraction', () => {
+    const input = {
+      action: 'schedule_meeting',
+      transcript: 'Planifie un rendez-vous chez Allo Seafood lundi prochain à 14h',
+      confidence: 0.95,
+      data: {
+        customerId: 'cust-1',
+        customerName: 'Allo Seafood',
+        title: 'Rendez-vous Allo Seafood',
+        content: 'Discuter des tarifs de fin d\'année',
+        dueDate: '2026-07-20T14:00:00.000Z',
+        taskType: 'meeting',
+        direction: null
+      }
+    };
+    const result = validateVoiceResult(input, allowedCustomers, currentDate);
+    expect(result.action).toBe('schedule_meeting');
+    expect(result.data.customerId).toBe('cust-1');
+    expect(result.data.customerName).toBe('Allo Seafood');
+    expect(result.data.dueDate).toBe('2026-07-20T14:00:00.000Z');
+    expect(result.data.taskType).toBe('meeting');
+  });
 });

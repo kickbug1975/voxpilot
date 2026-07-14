@@ -10,6 +10,7 @@ import {
   Trash2, AlertCircle, FileText, Calendar, Sparkles
 } from 'lucide-react';
 import { createQuote, saveQuoteItems, resolveQuoteItemsPrices } from '@/actions/quotes';
+import { scheduleVoiceMeeting } from '@/actions/meetings';
 
 interface VoiceAssistantWidgetProps {
   orgSlug: string;
@@ -18,7 +19,7 @@ interface VoiceAssistantWidgetProps {
 }
 
 interface ExtractedData {
-  action: 'create_task' | 'create_activity' | 'create_quote' | 'query_stock' | 'query_price' | 'unknown';
+  action: 'create_task' | 'create_activity' | 'create_quote' | 'query_stock' | 'query_price' | 'query_client_summary' | 'schedule_meeting' | 'unknown';
   transcript: string;
   confidence: number;
   data: {
@@ -188,7 +189,11 @@ export default function VoiceAssistantWidget({
   const handleConfirmAction = () => {
     if (!extracted) return;
 
-    if (extracted.action === 'query_stock' || extracted.action === 'query_price') {
+    if (
+      extracted.action === 'query_stock' ||
+      extracted.action === 'query_price' ||
+      extracted.action === 'query_client_summary'
+    ) {
       setExtracted(null);
       return;
     }
@@ -246,6 +251,17 @@ export default function VoiceAssistantWidget({
           if (saveRes.error) throw new Error(saveRes.error);
 
           setSuccessMsg("Devis créé avec succès !");
+        } else if (extracted.action === 'schedule_meeting') {
+          const res = await scheduleVoiceMeeting(orgSlug, {
+            customerName: actionData.customerName,
+            title: actionData.title,
+            dueDate: actionData.dueDate,
+            description: actionData.content,
+            taskType: actionData.taskType
+          });
+          if (res.error) throw new Error(res.error);
+
+          setSuccessMsg("Rendez-vous planifié avec succès !");
         }
 
         // Reset widget after success
@@ -269,6 +285,8 @@ export default function VoiceAssistantWidget({
       case 'create_quote': return "Création d'un devis";
       case 'query_stock': return "Consultation de stock";
       case 'query_price': return "Consultation de tarif";
+      case 'query_client_summary': return "Résumé client";
+      case 'schedule_meeting': return "Planification de rendez-vous";
       default: return "Inconnu";
     }
   };
@@ -413,8 +431,8 @@ export default function VoiceAssistantWidget({
                   </Badge>
                 </div>
 
-                {(extracted.action === 'query_stock' || extracted.action === 'query_price') ? (
-                  <div className="text-xs font-semibold text-slate-800 leading-relaxed">
+                {(extracted.action === 'query_stock' || extracted.action === 'query_price' || extracted.action === 'query_client_summary') ? (
+                  <div className="text-xs font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap max-h-60 overflow-y-auto">
                     {extracted.data.content}
                   </div>
                 ) : (
@@ -464,7 +482,7 @@ export default function VoiceAssistantWidget({
 
               {/* BUTTONS */}
               <div className="flex justify-end gap-2 pt-1 border-t border-slate-100">
-                {(extracted.action === 'query_stock' || extracted.action === 'query_price') ? (
+                {(extracted.action === 'query_stock' || extracted.action === 'query_price' || extracted.action === 'query_client_summary') ? (
                   <Button 
                     size="sm" 
                     onClick={handleConfirmAction}

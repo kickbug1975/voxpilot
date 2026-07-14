@@ -21,7 +21,16 @@ export const VoiceCrmDataSchema = z.object({
 });
 
 export const VoiceCrmResultSchema = z.object({
-  action: z.enum(['create_task', 'create_activity', 'create_quote', 'query_stock', 'query_price', 'unknown']),
+  action: z.enum([
+    'create_task',
+    'create_activity',
+    'create_quote',
+    'query_stock',
+    'query_price',
+    'query_client_summary',
+    'schedule_meeting',
+    'unknown'
+  ]),
   transcript: z.string(),
   confidence: z.number(),
   data: VoiceCrmDataSchema,
@@ -132,14 +141,18 @@ export function validateVoiceResult(
     if (!matchedCustomer) {
       console.warn(`[VOICE VALIDATOR] Customer ID "${result.data.customerId}" is not in the organization's customer list.`);
       result.data.customerId = null;
-      result.data.customerName = null;
+      if (result.action !== 'query_client_summary' && result.action !== 'schedule_meeting') {
+        result.data.customerName = null;
+      }
     } else {
       // Ensure the official legal name matches what's stored
       result.data.customerName = matchedCustomer.legal_name;
     }
   } else {
     result.data.customerId = null;
-    result.data.customerName = null;
+    if (result.action !== 'query_client_summary' && result.action !== 'schedule_meeting') {
+      result.data.customerName = null;
+    }
   }
 
   // 3. Safety checks for date calculation
@@ -150,7 +163,7 @@ export function validateVoiceResult(
     if (isNaN(dueTime) || isNaN(currentTime)) {
       console.warn('[VOICE VALIDATOR] Invalid date parsing:', result.data.dueDate, currentDateStr);
       result.data.dueDate = null;
-      if (result.action === 'create_task') {
+      if (result.action === 'create_task' || result.action === 'schedule_meeting') {
         result.action = 'unknown';
       }
     } else {
@@ -162,7 +175,7 @@ export function validateVoiceResult(
       if (diffMs < -oneDayMs || diffMs > 2 * oneYearMs) {
         console.warn(`[VOICE VALIDATOR] Date range violation: dueDate="${result.data.dueDate}" relative to currentDate="${currentDateStr}"`);
         result.data.dueDate = null;
-        if (result.action === 'create_task') {
+        if (result.action === 'create_task' || result.action === 'schedule_meeting') {
           result.action = 'unknown';
         }
       }

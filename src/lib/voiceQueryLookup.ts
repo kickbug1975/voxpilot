@@ -45,7 +45,7 @@ async function findClosestProduct(supabase: any, orgId: string, productName: str
   return null;
 }
 
-async function findClosestCustomer(supabase: any, orgId: string, customerName: string) {
+export async function findClosestCustomer(supabase: any, orgId: string, customerName: string) {
   const cleanName = customerName.trim();
   if (!cleanName) return null;
 

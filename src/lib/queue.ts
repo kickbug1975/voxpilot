@@ -207,6 +207,24 @@ export function initializeWorker() {
             if (validatedResult.action === 'query_stock' || validatedResult.action === 'query_price') {
               const adminSupabase = createAdminClient();
               await performVoiceQueryLookup(validatedResult, job.data.orgId, adminSupabase);
+            } else if (validatedResult.action === 'query_client_summary') {
+              const adminSupabase = createAdminClient();
+              let customerId = validatedResult.data.customerId;
+              if (!customerId && validatedResult.data.customerName) {
+                const { findClosestCustomer } = await import('./voiceQueryLookup');
+                const customer = await findClosestCustomer(adminSupabase, job.data.orgId, validatedResult.data.customerName);
+                if (customer) {
+                  customerId = customer.id;
+                  validatedResult.data.customerId = customer.id;
+                  validatedResult.data.customerName = customer.legal_name;
+                }
+              }
+              if (customerId) {
+                const { getCustomerSummary } = await import('./voiceCustomerSummary');
+                validatedResult.data.content = await getCustomerSummary(customerId, job.data.orgId, adminSupabase);
+              } else {
+                validatedResult.data.content = `Client "${validatedResult.data.customerName || 'non spécifié'}" non trouvé.`;
+              }
             }
 
             if (generation) {
