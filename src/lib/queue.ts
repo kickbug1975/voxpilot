@@ -2,6 +2,7 @@ import { Queue, Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { env } from './env';
 import { sendEmailDirect } from './emailSender';
+import { validateVoiceResult } from './voiceValidator';
 
 const globalForRedis = globalThis as unknown as {
   redisConnection: IORedis | undefined;
@@ -118,7 +119,15 @@ export function initializeWorker() {
       async (job: Job) => {
         console.log(`[Worker] Job de voix ${job.id} démarré (${job.name})...`);
         if (job.name === 'process-voice') {
-          const { fileDataUri, apiKey, systemPrompt, NEXT_PUBLIC_APP_URL, response_format } = job.data;
+          const { 
+            fileDataUri, 
+            apiKey, 
+            systemPrompt, 
+            NEXT_PUBLIC_APP_URL, 
+            response_format,
+            allowedCustomers,
+            currentDate
+          } = job.data;
           
           // Trace Langfuse inside the worker if active
           const { langfuse } = await import('./langfuse');
@@ -190,10 +199,11 @@ export function initializeWorker() {
             }
 
             const parsedResult = JSON.parse(content);
+            const validatedResult = validateVoiceResult(parsedResult, allowedCustomers || [], currentDate);
 
             if (generation) {
               generation.end({
-                output: parsedResult,
+                output: validatedResult,
                 usage: resJson.usage ? {
                   promptTokens: resJson.usage.prompt_tokens,
                   completionTokens: resJson.usage.completion_tokens,
@@ -203,7 +213,7 @@ export function initializeWorker() {
             }
 
             if (langfuse) await langfuse.shutdownAsync();
-            return parsedResult;
+            return validatedResult;
 
           } catch (err: any) {
             console.error('Async voice processing error:', err);
