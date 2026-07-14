@@ -30,6 +30,7 @@ const serverSchema = z.object({
   LANGFUSE_PUBLIC_KEY: z.string().optional(),
   LANGFUSE_SECRET_KEY: z.string().optional(),
   LANGFUSE_BASE_URL: z.string().optional(),
+  REDIS_URL: z.string().optional(),
 });
 
 const isServer = typeof window === 'undefined';
@@ -64,6 +65,7 @@ const parseResult = envSchema.safeParse({
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
+    REDIS_URL: process.env.REDIS_URL,
   } : {}),
 });
 

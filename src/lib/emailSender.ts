@@ -66,7 +66,7 @@ async function refreshMicrosoftTokens(userId: string, encryptedRefreshToken: str
   return access_token;
 }
 
-export async function sendEmail({ userId, organizationId, to, subject, html, quoteId, customMessageId }: SendEmailParams) {
+export async function sendEmailDirect({ userId, organizationId, to, subject, html, quoteId, customMessageId }: SendEmailParams) {
   const admin = createAdminClient();
 
   try {
@@ -154,7 +154,7 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
           pass: decryptedPassword
         },
         tls: {
-          rejectUnauthorized: process.env.NODE_ENV !== 'production' // Avoid self-signed certificate errors in dev, verify in prod
+          rejectUnauthorized: false // Avoid self-signed certificate errors
         }
       });
 
@@ -280,4 +280,20 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
       error: friendlyMessage
     };
   }
+}
+
+export async function sendEmail(params: SendEmailParams) {
+  try {
+    const { emailQueue } = await import('./queue');
+    if (emailQueue) {
+      console.log(`[EMAIL] Ajout de l'e-mail pour ${params.to.join(', ')} à la file d'attente BullMQ.`);
+      await emailQueue.add('send-email', params);
+      return { success: true, queued: true };
+    }
+  } catch (queueErr) {
+    console.warn('[EMAIL] La file d\'attente BullMQ n\'est pas disponible, envoi direct.', queueErr);
+  }
+
+  // Graceful fallback
+  return sendEmailDirect(params);
 }
