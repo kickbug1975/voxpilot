@@ -7,8 +7,13 @@ export async function POST(req: NextRequest) {
     const authHeader = req.headers.get('Authorization');
     const cronSecret = process.env.CRON_SECRET || process.env.SUPABASE_SECRET_KEY;
 
-    // Enforce auth if secret is defined
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer ${process.env.SUPABASE_SECRET_KEY}`) {
+    // Enforce auth with fail-closed security design
+    if (!cronSecret) {
+      console.error('[CRM_DAILY_CRON] Security configuration missing (CRON_SECRET and SUPABASE_SECRET_KEY are not set).');
+      return NextResponse.json({ error: 'Configuration de sécurité manquante sur le serveur' }, { status: 500 });
+    }
+
+    if (authHeader !== `Bearer ${cronSecret}` && authHeader !== `Bearer ${process.env.SUPABASE_SECRET_KEY}`) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
     }
 

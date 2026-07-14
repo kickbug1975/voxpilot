@@ -6,8 +6,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const apiKey = searchParams.get('apiKey');
 
-    // Utilisation d'un token sécurisé basé sur l'APP_ENCRYPTION_KEY
-    const expectedKey = process.env.APP_ENCRYPTION_KEY || 'default-secret-cron-token-938210';
+    // Use CRON_SECRET as primary, fallback to APP_ENCRYPTION_KEY. No insecure default fallback.
+    const expectedKey = process.env.CRON_SECRET || process.env.APP_ENCRYPTION_KEY;
+    
+    if (!expectedKey) {
+      console.error('[RESET_GHLIN_STOCK_CRON] Security configuration missing (CRON_SECRET and APP_ENCRYPTION_KEY are not set).');
+      return NextResponse.json({ error: 'Configuration de sécurité manquante sur le serveur' }, { status: 500 });
+    }
     
     if (apiKey !== expectedKey) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });

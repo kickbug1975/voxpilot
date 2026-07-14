@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { env } from '@/lib/env';
+import { encrypt } from '@/lib/encryption';
+
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
@@ -93,12 +95,15 @@ export async function GET(req: NextRequest) {
 
     // 4. Save tokens securely in user_microsoft_tokens table using Admin Client (bypasses RLS for write-back)
     const admin = createAdminClient();
+    const encryptedAccessToken = encrypt(access_token);
+    const encryptedRefreshToken = encrypt(refresh_token);
+
     const { error: dbError } = await admin
       .from('user_microsoft_tokens')
       .upsert({
         user_id: user.id,
-        access_token,
-        refresh_token,
+        access_token: encryptedAccessToken,
+        refresh_token: encryptedRefreshToken,
         expires_at: expiresAt,
         email: microsoftEmail,
         updated_at: new Date().toISOString(),

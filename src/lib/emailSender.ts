@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { decrypt } from './encryption';
+import { encrypt, decrypt } from './encryption';
 import { env } from './env';
 
 interface SendEmailParams {
@@ -13,7 +13,7 @@ interface SendEmailParams {
   customMessageId?: string; // Optional custom message ID for console simulation/testing
 }
 
-async function refreshMicrosoftTokens(userId: string, refreshToken: string) {
+async function refreshMicrosoftTokens(userId: string, encryptedRefreshToken: string) {
   const admin = createAdminClient();
   const clientId = env.MICROSOFT_CLIENT_ID;
   const tenantId = env.MICROSOFT_TENANT_ID || 'common';
@@ -23,6 +23,8 @@ async function refreshMicrosoftTokens(userId: string, refreshToken: string) {
     throw new Error('Configuration Microsoft OAuth manquante (Client ID ou Client Secret dans .env)');
   }
 
+  const decryptedRefreshToken = decrypt(encryptedRefreshToken);
+
   const response = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
     method: 'POST',
     headers: {
@@ -31,7 +33,7 @@ async function refreshMicrosoftTokens(userId: string, refreshToken: string) {
     body: new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: refreshToken,
+      refresh_token: decryptedRefreshToken,
       grant_type: 'refresh_token',
     }),
   });
@@ -47,13 +49,13 @@ async function refreshMicrosoftTokens(userId: string, refreshToken: string) {
   const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
   const updateData: any = {
-    access_token,
+    access_token: encrypt(access_token),
     expires_at: expiresAt,
     updated_at: new Date().toISOString(),
   };
 
   if (newRefreshToken) {
-    updateData.refresh_token = newRefreshToken;
+    updateData.refresh_token = encrypt(newRefreshToken);
   }
 
   await admin
@@ -77,7 +79,7 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
 
     if (msToken) {
       console.log(`[EMAIL] Envoi de l'e-mail via Microsoft Graph pour l'utilisateur ${userId} (${msToken.email})`);
-      let accessToken = msToken.access_token;
+      let accessToken = decrypt(msToken.access_token);
       const isExpired = new Date(msToken.expires_at).getTime() < Date.now() + 60 * 1000; // Expired or expiring within 60s
 
       if (isExpired) {
@@ -152,7 +154,7 @@ export async function sendEmail({ userId, organizationId, to, subject, html, quo
           pass: decryptedPassword
         },
         tls: {
-          rejectUnauthorized: false // Avoid self-signed certificate errors
+          rejectUnauthorized: process.env.NODE_ENV !== 'production' // Avoid self-signed certificate errors in dev, verify in prod
         }
       });
 
