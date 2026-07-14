@@ -76,6 +76,15 @@ async function run() {
     envsToUpdate.push({ key: 'NEXT_PUBLIC_APP_URL', value: fqdn });
   }
 
+  // Forcer la variable REDIS_URL de production
+  const redisUrlIndex = envsToUpdate.findIndex(e => e.key === 'REDIS_URL');
+  const prodRedisUrl = 'redis://default:Y5ZMz9f8CQ6Y4sBXJBSoXmEuL5fCHH4nfYsiMBQtN97FEzqzcAiwlsMaGTFn0Go7@vj9z032x87e0tliies4qkqd5:6379/0';
+  if (redisUrlIndex !== -1) {
+    envsToUpdate[redisUrlIndex].value = prodRedisUrl;
+  } else {
+    envsToUpdate.push({ key: 'REDIS_URL', value: prodRedisUrl });
+  }
+
   console.log(`⚙️ Envoi de ${envsToUpdate.length} variables d'environnement vers Coolify...`);
   
   for (const { key, value } of envsToUpdate) {
