@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { env } from '@/lib/env';
 
+function matchProduct(itemProductName: string, selectedProductName: string): boolean {
+  const cleanItem = itemProductName.toLowerCase().trim();
+  const cleanSelected = selectedProductName.toLowerCase().trim();
+  
+  if (cleanItem.includes(cleanSelected)) return true;
+  
+  // Split selected product name into lowercase alphanumeric words, filtering out weight unit keywords
+  const selectedWords = cleanSelected.split(/[\s,.'"\(\)\/-]+/).filter(w => w.length > 0 && w !== 'kg');
+  if (selectedWords.length === 0) return false;
+  
+  return selectedWords.every(word => cleanItem.includes(word));
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -105,7 +118,7 @@ export async function POST(req: NextRequest) {
           items.forEach((item: any) => {
             const matchesProduct = 
               item.product_id === productId || 
-              (item.product_name && item.product_name.toLowerCase().includes(productName.toLowerCase()));
+              (item.product_name && matchProduct(item.product_name, productName));
 
             if (matchesProduct) {
               const qty = item.quantity_kg ? parseFloat(item.quantity_kg) : 0;
