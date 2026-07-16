@@ -49,39 +49,39 @@ export async function findClosestCustomer(supabase: any, orgId: string, customer
   const cleanName = customerName.trim();
   if (!cleanName) return null;
 
-  // 1. Exact match (case insensitive)
+  // 1. Exact match (case insensitive) on legal_name or trade_name
   const { data: exact } = await supabase
     .from('customers')
-    .select('id, legal_name')
+    .select('id, legal_name, trade_name')
     .eq('organization_id', orgId)
     .eq('is_active', true)
-    .ilike('legal_name', cleanName)
+    .or(`legal_name.ilike.${cleanName},trade_name.ilike.${cleanName}`)
     .limit(1)
     .maybeSingle();
 
   if (exact) return exact;
 
-  // 2. Substring match
+  // 2. Substring match on legal_name or trade_name
   const { data: substring } = await supabase
     .from('customers')
-    .select('id, legal_name')
+    .select('id, legal_name, trade_name')
     .eq('organization_id', orgId)
     .eq('is_active', true)
-    .ilike('legal_name', `%${cleanName}%`)
+    .or(`legal_name.ilike.%${cleanName}%,trade_name.ilike.%${cleanName}%`)
     .limit(1)
     .maybeSingle();
 
   if (substring) return substring;
 
-  // 3. Word match
+  // 3. Word match on legal_name or trade_name
   const words = cleanName.split(/\s+/).filter(w => w.length > 2);
   for (const word of words) {
     const { data: wordMatch } = await supabase
       .from('customers')
-      .select('id, legal_name')
+      .select('id, legal_name, trade_name')
       .eq('organization_id', orgId)
       .eq('is_active', true)
-      .ilike('legal_name', `%${word}%`)
+      .or(`legal_name.ilike.%${word}%,trade_name.ilike.%${word}%`)
       .limit(1)
       .maybeSingle();
     if (wordMatch) return wordMatch;
