@@ -61,7 +61,7 @@ export const voiceQueue =
             type: 'exponential',
             delay: 5000,
           },
-          removeOnComplete: true,
+          removeOnComplete: { age: 1800 }, // Garder 30 minutes en cache pour le polling client
           removeOnFail: false,
         },
       }))
