@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
     // 2. Parse request body
     const body = await req.json();
-    const { orgSlug } = body;
+    const { orgSlug, singleCustomerId, customInstruction, currentMessage } = body;
 
     if (!orgSlug) {
       return NextResponse.json({ error: 'Paramètre orgSlug manquant' }, { status: 400 });
@@ -41,6 +41,44 @@ export async function POST(req: NextRequest) {
     if (custError) {
       console.error('[RELANCES API] Customers fetch error:', custError);
       return NextResponse.json({ error: 'Impossible de récupérer la liste des clients' }, { status: 500 });
+    }
+
+    // Handle single customer AI regeneration with custom instruction
+    if (singleCustomerId && customInstruction) {
+      const apiKey = env.OPENROUTER_API_KEY;
+      const targetCustomer = (customers || []).find(c => c.id === singleCustomerId);
+      const displayName = targetCustomer?.trade_name || targetCustomer?.legal_name || 'Client';
+
+      const prompt = `Tu es l'assistant commercial de Maison Fumesse.
+Voici le message de relance WhatsApp actuel pour le client "${displayName}" :
+"${currentMessage || ''}"
+
+L'utilisateur demande d'adapter le message selon cette consigne :
+"${customInstruction}"
+
+Rédige le nouveau message WhatsApp de relance en intégrant parfaitement cette consigne. Reste chaleureux, professionnel et concis. N'inclus aucun commentaire hors du message.`;
+
+      try {
+        const aiRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [{ role: 'system', content: prompt }],
+            temperature: 0.7
+          })
+        });
+
+        const json: any = await aiRes.json();
+        const newMsg = json.choices?.[0]?.message?.content?.trim();
+        return NextResponse.json({ success: true, relanceMessage: newMsg });
+      } catch (err: any) {
+        console.error('[RELANCES API] Single customer regeneration failed:', err);
+        return NextResponse.json({ error: 'Échec de la régénération IA' }, { status: 500 });
+      }
     }
 
     // 5. Fetch orders from the last 60 days
