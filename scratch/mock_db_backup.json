@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-26T15:52:30.059Z",
+  "timestamp": "2026-07-14T14:13:33.060Z",
   "organizations": [
     {
       "id": "e6326d9c-df7c-4860-93a0-c65d6c8b9a11",
@@ -44,7 +44,7 @@
       "phone": "+32 65 77 76 72",
       "commercial_email": "Info@maisonfumesse.be",
       "logo_path": null,
-      "default_margin_rate": "0.20000",
+      "default_margin_rate": "0.25000",
       "default_rounding_rule": "up_0_05",
       "default_quote_validity_days": 14,
       "cost_increase_alert_rate": "0.05000",
@@ -53,7 +53,7 @@
       "onboarding_completed_at": null,
       "created_by": "d1c13c27-d209-47b3-9e78-3d852c2a246d",
       "created_at": "2026-06-24T19:40:40.215Z",
-      "updated_at": "2026-06-24T19:45:48.658Z",
+      "updated_at": "2026-06-27T18:12:15.887Z",
       "crm_visibility_mode": "all_customers",
       "default_quote_follow_up_delay_days": 3,
       "inactive_customer_delay_days": 30,

@@ -12,6 +12,7 @@ import {
   TrendingUp, TrendingDown, RefreshCw, Info, UserCheck, Plus
 } from 'lucide-react';
 import { markAlertStatus } from '@/actions/dashboard';
+import RelancesWidget from '@/components/RelancesWidget';
 
 interface DashboardStats {
   averageMargin: number;
@@ -98,11 +99,17 @@ export default function DashboardClient({
 
   // Format date helper
   const formatDateRelative = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const days = Math.floor(diff / (24 * 3600 * 1000));
-    if (days === 0) return "Aujourd'hui";
-    if (days === 1) return "Hier";
-    return `Il y a ${days} jours`;
+    try {
+      const date = new Date(dateStr);
+      return new Intl.DateTimeFormat('fr-BE', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(date);
+    } catch {
+      return dateStr;
+    }
   };
 
   const handleResolveAlert = async (alertId: string) => {
@@ -198,11 +205,14 @@ export default function DashboardClient({
       </div>
 
       {successMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium rounded-lg flex items-center gap-1.5">
-          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          <span>{successMsg}</span>
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium p-3 rounded-lg flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+          {successMsg}
         </div>
       )}
+
+      {/* Relances Prédictives Widget */}
+      <RelancesWidget orgSlug={orgSlug} />
 
       {/* 1. FINANCIAL KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
